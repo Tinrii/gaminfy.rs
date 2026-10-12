@@ -136,7 +136,7 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
               src={product.imageUrl}
               alt={product.name}
               fill
-              priority
+              loading="eager"
               sizes="(min-width: 1024px) 416px, 100vw"
               className="object-cover"
             />
