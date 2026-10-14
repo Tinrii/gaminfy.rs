@@ -82,7 +82,7 @@ export async function SiteFooter() {
       <FooterWordmark />
 
       <div className="container-page relative flex flex-col gap-2 py-6 text-xs text-muted-foreground sm:flex-row sm:justify-between">
-        <p>© Gaminfy. {dict.footer.rights}</p>
+        <p>© Gaminfy. {dict.footer.rights} - <a href="https://weareaxora.com" className="hover:text-primary transition-colors">Made by Axora</a></p>
         <p>{dict.footer.trademarks}</p>
       </div>
     </footer>
