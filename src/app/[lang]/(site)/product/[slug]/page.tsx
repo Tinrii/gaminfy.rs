@@ -24,7 +24,7 @@ import { formatPrice } from "@/lib/format";
 import { absoluteAsset, absoluteUrl, breadcrumbLd, pageMetadata, siteUrl } from "@/lib/seo";
 import { JsonLd } from "@/components/site/json-ld";
 import { BuyBox } from "./buy-box";
-import { CheckoutNotice } from "./checkout-notice";
+import { CheckoutNotice } from "@/components/shop/checkout-notice";
 
 export async function generateStaticParams() {
   return (await getProductSlugs()).map((slug) => ({ slug }));
@@ -165,7 +165,7 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
               </span>
             </div>
 
-            <BuyBox productId={product.id} priceMinor={product.priceMinor} currency={product.currency} inStock={product.inStock} />
+            <BuyBox productId={product.id} productName={product.name} priceMinor={product.priceMinor} currency={product.currency} inStock={product.inStock} />
 
             <p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
               <ShieldCheckIcon className="size-4 text-primary" />

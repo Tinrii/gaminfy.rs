@@ -31,10 +31,13 @@ async function AdminOrder({ params }: Pick<PageProps<"/admin/orders/[id]">, "par
   const detail = Number.isInteger(id) ? await getOrderDetail(id) : null;
   if (!detail) notFound();
 
-  const { order, product, user, code, details } = detail;
-  const automatic = product.deliveryType === "automatic";
-  const canAssign = automatic && !code && (order.status === "paid" || order.status === "processing");
-  const freeCodes = canAssign ? await unassignedCodeCount(product.id) : 0;
+  const { order, user, items, details } = detail;
+  const hasManual = items.some((i) => i.deliveryType === "manual");
+  const missing = items.filter((i) => i.deliveryType === "automatic" && i.codes.length < i.quantity);
+  const canAssign = missing.length > 0 && (order.status === "paid" || order.status === "processing");
+  const freeCodes = canAssign
+    ? await Promise.all(missing.map(async (i) => ({ name: i.name, free: await unassignedCodeCount(i.productId) })))
+    : [];
 
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_22rem]">
@@ -43,12 +46,11 @@ async function AdminOrder({ params }: Pick<PageProps<"/admin/orders/[id]">, "par
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs text-muted-foreground">Order #{order.id}</p>
-              <h1 className="mt-1 text-2xl font-bold tracking-tight">{product.name}</h1>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight">
+                {items.length === 1 ? items[0].name : `${items.length} products`}
+              </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                {automatic ? "Automatic code delivery" : "Manual fulfillment"} ·{" "}
-                <Link href={`/admin/products/${product.id}`} className="text-primary hover:underline">
-                  edit product
-                </Link>
+                {hasManual ? "Includes manual fulfillment" : "Automatic code delivery"}
               </p>
             </div>
             <OrderStatusBadge status={order.status} />
@@ -60,7 +62,15 @@ async function AdminOrder({ params }: Pick<PageProps<"/admin/orders/[id]">, "par
                 {user.email}
               </a>
             </Info>
-            <Info label="Total">{formatPrice(order.amountMinor, order.currency)}</Info>
+            <Info label="Total">
+              {formatPrice(order.amountMinor, order.currency)}
+              {order.discountMinor > 0 && (
+                <span className="ml-2 text-xs text-muted-foreground">
+                  ({formatPrice(order.subtotalMinor, order.currency)} − {formatPrice(order.discountMinor, order.currency)}
+                  {order.couponCode ? ` · ${order.couponCode}` : ""})
+                </span>
+              )}
+            </Info>
             <Info label="Placed">{formatDateTime(order.createdAt)}</Info>
             <Info label="Paid">{order.paidAt ? formatDateTime(order.paidAt) : "—"}</Info>
             <Info label="Delivered">{order.deliveredAt ? formatDateTime(order.deliveredAt) : "—"}</Info>
@@ -70,26 +80,53 @@ async function AdminOrder({ params }: Pick<PageProps<"/admin/orders/[id]">, "par
           </dl>
         </section>
 
-        {automatic && (
-          <section className="rounded-2xl border border-white/[0.06] bg-card p-6">
-            <h2 className="font-semibold">Delivery code</h2>
-            {code ? (
-              <p className="mt-3 rounded-xl bg-background/60 p-3 font-mono text-sm break-all">{code}</p>
-            ) : canAssign ? (
-              <ActionForm action={assignCodeToOrder} className="mt-3 flex flex-wrap items-center gap-3">
-                <input type="hidden" name="id" value={order.id} />
-                <p className="text-sm text-muted-foreground">
-                  No code assigned yet — {freeCodes} available for this product.
-                </p>
-                <SubmitButton className="rounded-xl">Assign code & email customer</SubmitButton>
-              </ActionForm>
-            ) : (
-              <p className="mt-3 text-sm text-muted-foreground">No code assigned.</p>
-            )}
-          </section>
-        )}
+        <section className="rounded-2xl border border-white/[0.06] bg-card p-6">
+          <h2 className="font-semibold">Items</h2>
+          <ul className="mt-4 divide-y divide-white/[0.06]">
+            {items.map((item) => (
+              <li key={item.id} className="py-4 first:pt-0 last:pb-0">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <div>
+                    <Link href={`/admin/products/${item.productId}`} className="font-medium hover:text-primary hover:underline">
+                      {item.name}
+                    </Link>
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {item.deliveryType === "manual" ? "manual" : "code"}
+                    </span>
+                  </div>
+                  <span className="text-sm text-muted-foreground">
+                    {item.quantity} × {formatPrice(item.unitPriceMinor, order.currency)}
+                  </span>
+                </div>
+                {item.deliveryType === "automatic" && (
+                  <div className="mt-2 space-y-1.5">
+                    {item.codes.map((code) => (
+                      <p key={code} className="rounded-lg bg-background/60 px-3 py-2 font-mono text-sm break-all">
+                        {code}
+                      </p>
+                    ))}
+                    {item.codes.length < item.quantity && (
+                      <p className="text-xs text-gold">
+                        {item.quantity - item.codes.length} code{item.quantity - item.codes.length === 1 ? "" : "s"} not assigned yet
+                      </p>
+                    )}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+          {canAssign && (
+            <ActionForm action={assignCodeToOrder} className="mt-5 flex flex-wrap items-center gap-3 border-t border-white/[0.06] pt-5">
+              <input type="hidden" name="id" value={order.id} />
+              <p className="text-sm text-muted-foreground">
+                Available now: {freeCodes.map((c) => `${c.name} (${c.free})`).join(", ")}
+              </p>
+              <SubmitButton className="rounded-xl">Assign missing codes</SubmitButton>
+            </ActionForm>
+          )}
+        </section>
 
-        {!automatic && (
+        {hasManual && (
           <section className="rounded-2xl border border-white/[0.06] bg-card p-6">
             <h2 className="font-semibold">Customer contact details</h2>
             {details ? (

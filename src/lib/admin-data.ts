@@ -6,7 +6,7 @@ import type { OrderStatus } from "@/lib/db/schema";
 
 // Every caller must run requireAdmin() first — these return data across all users.
 
-const { orders, products, productCodes, categories, users, contactMessages, fulfillmentDetails } = schema;
+const { orders, orderItems, coupons, products, productCodes, categories, users, contactMessages, fulfillmentDetails } = schema;
 
 const freeCodes = sql<number>`${AVAILABLE_CODES_SQL}`;
 
@@ -41,25 +41,53 @@ export async function listOrders({ status, limit = 100 }: { status?: OrderStatus
       : status
         ? eq(orders.status, status)
         : undefined;
-  return db()
+  const rows = await db()
     .select({
       id: orders.id,
       status: orders.status,
       amountMinor: orders.amountMinor,
       currency: orders.currency,
+      couponCode: orders.couponCode,
       createdAt: orders.createdAt,
-      productName: products.name,
-      deliveryType: products.deliveryType,
       customer: users.email,
       hasDetails: sql<number>`${fulfillmentDetails.id} is not null`,
     })
     .from(orders)
-    .innerJoin(products, eq(orders.productId, products.id))
     .innerJoin(users, eq(orders.userId, users.id))
     .leftJoin(fulfillmentDetails, eq(fulfillmentDetails.orderId, orders.id))
     .where(where)
     .orderBy(desc(orders.createdAt))
     .limit(limit);
+
+  const lines = rows.length
+    ? await db()
+        .select({
+          orderId: orderItems.orderId,
+          name: sql<string>`coalesce(${products.name}, ${orderItems.productName})`,
+          quantity: orderItems.quantity,
+          deliveryType: products.deliveryType,
+        })
+        .from(orderItems)
+        .innerJoin(products, eq(orderItems.productId, products.id))
+        .where(inArray(orderItems.orderId, rows.map((r) => r.id)))
+        .orderBy(orderItems.id)
+    : [];
+
+  return rows.map((r) => {
+    const own = lines.filter((l) => l.orderId === r.id);
+    return {
+      ...r,
+      productName: own[0] ? `${own[0].name}${own[0].quantity > 1 ? ` ×${own[0].quantity}` : ""}` : "—",
+      /** Other products in the order, for "+2 more". */
+      moreCount: Math.max(0, own.length - 1),
+      /** "manual" if any line needs hand delivery. */
+      deliveryType: own.some((l) => l.deliveryType === "manual") ? ("manual" as const) : ("automatic" as const),
+    };
+  });
+}
+
+export async function listCoupons() {
+  return db().select().from(coupons).orderBy(desc(coupons.isActive), desc(coupons.createdAt));
 }
 
 export async function listProductsAdmin() {

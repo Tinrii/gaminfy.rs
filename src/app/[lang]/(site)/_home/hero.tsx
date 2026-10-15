@@ -7,14 +7,9 @@ import { ArrowRightIcon, SearchIcon } from "lucide-react";
 import { gsap, MOTION_OK, useGSAP } from "@/components/motion/gsap";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/client";
+import { HeroCarousel, type HeroCategory } from "./hero-carousel";
 
-const FAN = [
-  { src: "/games/valorant.webp", alt: "Valorant", className: "left-[4%] top-[14%] -rotate-[11deg] z-10" },
-  { src: "/games/pubg.webp", alt: "PUBG", className: "right-[2%] top-[10%] rotate-[9deg] z-10" },
-  { src: "/games/fortnite.webp", alt: "Fortnite", className: "left-1/2 top-0 -translate-x-1/2 z-20" },
-];
-
-export function Hero() {
+export function Hero({ categories }: { categories: HeroCategory[] }) {
   const { dict, href } = useI18n();
   const ref = useRef<HTMLElement>(null);
 
@@ -25,19 +20,13 @@ export function Hero() {
         const tl = gsap.timeline({ defaults: { ease: "power3.out" } });
         tl.from("[data-hero-word]", { yPercent: 110, duration: 0.9, stagger: 0.06 })
           .from("[data-hero-fade]", { autoAlpha: 0, y: 18, duration: 0.7, stagger: 0.08 }, "-=0.5")
-          .from(
-            "[data-hero-card]",
-            { autoAlpha: 0, y: 80, rotate: 0, duration: 1.1, stagger: 0.12, ease: "expo.out" },
-            "-=0.9",
-          );
+          .from("[data-hero-stage]", { autoAlpha: 0, y: 80, duration: 1.1, ease: "expo.out" }, "-=0.9");
 
-        // Cards drift apart at different speeds while scrolling past the hero.
-        gsap.utils.toArray<HTMLElement>("[data-hero-card]").forEach((card, i) => {
-          gsap.to(card, {
-            yPercent: [-14, -22, -8][i],
-            ease: "none",
-            scrollTrigger: { trigger: ref.current, start: "top top", end: "bottom top", scrub: true },
-          });
+        // The card fan drifts up slightly while scrolling past the hero.
+        gsap.to("[data-hero-stage]", {
+          yPercent: -12,
+          ease: "none",
+          scrollTrigger: { trigger: ref.current, start: "top top", end: "bottom top", scrub: true },
         });
         gsap.to("[data-hero-bg]", {
           yPercent: 18,
@@ -114,19 +103,8 @@ export function Hero() {
           </div>
         </div>
 
-        <div className="relative mx-auto aspect-[1.15] w-full max-w-[34rem]" aria-hidden>
-          <div className="absolute inset-[12%] rounded-full bg-primary/20 blur-[90px]" />
-          {FAN.map((card) => (
-            <div
-              key={card.src}
-              data-hero-card
-              className={`absolute w-[44%] overflow-hidden rounded-[1.4rem] border border-white/10 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.9)] ${card.className}`}
-            >
-              <div className="relative aspect-[4/5]">
-                <Image src={card.src} alt={card.alt} fill priority sizes="(min-width: 1024px) 240px, 40vw" className="object-cover" />
-              </div>
-            </div>
-          ))}
+        <div data-hero-stage>
+          <HeroCarousel categories={categories} />
         </div>
       </div>
     </section>

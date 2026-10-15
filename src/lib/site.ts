@@ -19,3 +19,6 @@ export const LEGAL = {
   country: { sr: "Republici Srbiji", en: "the Republic of Serbia" },
   email: "contact@gaminfy.rs",
 };
+
+/** WhatsApp contact (international format, digits only) for the floating chat button. */
+export const WHATSAPP_NUMBER = "381640069325";

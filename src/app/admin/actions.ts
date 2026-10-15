@@ -8,11 +8,11 @@ import { requireAdmin } from "@/lib/auth";
 import { CATALOG_TAG } from "@/lib/catalog";
 import { db, schema } from "@/lib/db";
 import { CONTACT_FIELD_KEYS } from "@/lib/format";
-import { notifyDelivered } from "@/lib/orders";
+import { fillMissingCodes, notifyDelivered } from "@/lib/orders";
 import { putPublicObject } from "@/lib/storage";
 import sharp from "sharp";
 
-const { products, productCodes, categories, orders, contactMessages } = schema;
+const { products, productCodes, categories, orders, orderItems, contactMessages, coupons } = schema;
 
 export type AdminState = { ok?: boolean; error?: string; message?: string };
 
@@ -145,8 +145,8 @@ export async function deleteProduct(formData: FormData) {
 
   const [{ n }] = await db()
     .select({ n: sql<number>`count(*)` })
-    .from(orders)
-    .where(eq(orders.productId, id));
+    .from(orderItems)
+    .where(eq(orderItems.productId, id));
 
   if (Number(n) > 0) {
     // Keep history intact: products with orders are hidden, not deleted.
@@ -226,38 +226,24 @@ export async function updateOrderStatus(_prev: AdminState, formData: FormData): 
   return { ok: true, message: status.data === "delivered" ? "Marked delivered — customer notified." : "Status updated." };
 }
 
-/** For paid automatic orders that came in while the product was out of codes. */
+/** For paid orders that came in while a product was out of codes. */
 export async function assignCodeToOrder(_prev: AdminState, formData: FormData): Promise<AdminState> {
   await requireAdmin();
   const id = Number(formData.get("id"));
+  if (!Number.isInteger(id)) return { error: "Invalid order." };
 
-  const result = await db().transaction(async (tx) => {
-    const [order] = await tx.select().from(orders).where(eq(orders.id, id)).for("update");
-    if (!order || (order.status !== "paid" && order.status !== "processing")) return "bad-status" as const;
-    const [assigned] = await tx.select().from(productCodes).where(eq(productCodes.orderId, id));
-    if (assigned) return "already" as const;
-    const [code] = await tx
-      .select({ id: productCodes.id })
-      .from(productCodes)
-      .where(and(eq(productCodes.productId, order.productId), isNull(productCodes.orderId)))
-      .orderBy(productCodes.id)
-      .limit(1)
-      .for("update", { skipLocked: true });
-    if (!code) return "no-stock" as const;
-    const now = new Date();
-    await tx.update(productCodes).set({ orderId: id, assignedAt: now }).where(eq(productCodes.id, code.id));
-    await tx.update(orders).set({ status: "delivered", deliveredAt: now }).where(eq(orders.id, id));
-    return "ok" as const;
-  });
+  const result = await fillMissingCodes(id);
+  if (result === "bad-status") return { error: "Only paid orders can receive codes." };
 
-  if (result === "no-stock") return { error: "No unassigned codes left — add codes to this product first." };
-  if (result === "already") return { error: "This order already has a code." };
-  if (result === "bad-status") return { error: "Only paid orders can receive a code." };
-
-  await notifyDelivered(id);
   updateTag(CATALOG_TAG);
   refresh();
-  return { ok: true, message: "Code assigned and emailed to the customer." };
+  const [order] = await db().select({ status: orders.status }).from(orders).where(eq(orders.id, id));
+  if (order?.status === "delivered") {
+    await notifyDelivered(id);
+    return { ok: true, message: "All codes assigned and emailed to the customer." };
+  }
+  if (result === "partial") return { error: "Still missing codes — add more codes to the product(s) first." };
+  return { ok: true, message: "Codes assigned. Manual items still need to be delivered." };
 }
 
 const categorySchema = z.object({
@@ -322,6 +308,97 @@ export async function toggleMessageHandled(formData: FormData) {
     .update(contactMessages)
     .set({ isHandled: sql`not ${contactMessages.isHandled}` })
     .where(eq(contactMessages.id, id));
+  refresh();
+}
+
+const couponSchema = z
+  .object({
+    id: z.coerce.number().int().positive().optional(),
+    code: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .transform((v) => v.replace(/\s+/g, ""))
+      .pipe(z.string().regex(/^[A-Z0-9_-]{3,40}$/, "Code must be 3–40 letters, digits, - or _.")),
+    type: z.enum(["fixed", "percent"]),
+    value: z.coerce.number().positive("Value must be greater than 0."),
+    minSubtotal: z
+      .string()
+      .trim()
+      .transform((v) => (v === "" ? null : Number(v)))
+      .refine((v) => v === null || (Number.isFinite(v) && v >= 0), "Minimum order must be a number or empty."),
+    maxUses: z
+      .string()
+      .trim()
+      .transform((v) => (v === "" ? null : Number(v)))
+      .refine((v) => v === null || (Number.isInteger(v) && v > 0), "Max uses must be a whole number or empty."),
+    expiresOn: z
+      .string()
+      .trim()
+      .refine((v) => v === "" || /^\d{4}-\d{2}-\d{2}$/.test(v), "Pick a valid date.")
+      .transform((v) => (v ? new Date(`${v}T23:59:59`) : null)),
+    isActive: z.boolean(),
+  })
+  .refine((c) => c.type === "fixed" || (Number.isInteger(c.value) && c.value <= 99), {
+    message: "Percent must be a whole number from 1 to 99.",
+  })
+  .refine((c) => c.type === "percent" || c.value <= 10_000_000, { message: "Amount is too large." });
+
+export async function saveCoupon(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  await requireAdmin();
+  const parsed = couponSchema.safeParse({
+    id: formData.get("id") || undefined,
+    code: formData.get("code") ?? "",
+    type: formData.get("type"),
+    value: formData.get("value"),
+    minSubtotal: formData.get("minSubtotal") ?? "",
+    maxUses: formData.get("maxUses") ?? "",
+    expiresOn: formData.get("expiresOn") ?? "",
+    isActive: formData.get("isActive") === "on",
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+
+  const { id, type, value, minSubtotal, expiresOn, ...rest } = parsed.data;
+  const values = {
+    ...rest,
+    type,
+    // Fixed amounts are typed in dinars and stored in para; percent is a whole number.
+    value: type === "fixed" ? Math.round(value * 100) : value,
+    minSubtotalMinor: minSubtotal === null ? null : Math.round(minSubtotal * 100),
+    expiresAt: expiresOn,
+  };
+  try {
+    if (id) await db().update(coupons).set(values).where(eq(coupons.id, id));
+    else await db().insert(coupons).values(values);
+  } catch (err) {
+    if (isDuplicate(err)) return { error: "A coupon with that code already exists." };
+    throw err;
+  }
+  refresh();
+  return { ok: true, message: id ? "Coupon saved." : "Coupon created." };
+}
+
+export async function toggleCouponActive(formData: FormData) {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  await db()
+    .update(coupons)
+    .set({ isActive: sql`not ${coupons.isActive}` })
+    .where(eq(coupons.id, id));
+  refresh();
+}
+
+export async function deleteCoupon(formData: FormData) {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (!Number.isInteger(id)) return;
+  const [{ n }] = await db()
+    .select({ n: sql<number>`count(*)` })
+    .from(orders)
+    .where(eq(orders.couponId, id));
+  // Coupons used on orders are only switched off, so order history keeps its link.
+  if (Number(n) > 0) await db().update(coupons).set({ isActive: false }).where(eq(coupons.id, id));
+  else await db().delete(coupons).where(eq(coupons.id, id));
   refresh();
 }
 

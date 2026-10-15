@@ -6,12 +6,13 @@ import { ArrowLeftIcon, CheckIcon, KeyRoundIcon, Loader2Icon, MessageCircleIcon 
 import { OrderStatusBadge } from "@/components/shop/order-status-badge";
 import { Price } from "@/components/shop/price";
 import { Skeleton } from "@/components/ui/skeleton";
-import { t } from "@/i18n/dictionaries";
+import { plural, t } from "@/i18n/dictionaries";
 import { getI18n } from "@/i18n/server";
 import { isAdmin, requireUserId } from "@/lib/auth";
 import { CONTACT_FIELD_KEYS, formatDateTime, parseContactFields } from "@/lib/format";
 import { getOrderDetail } from "@/lib/orders";
 import { cn } from "@/lib/utils";
+import { ClearPurchasedFromCart } from "./clear-cart";
 import { CopyCode } from "./copy-code";
 import { FulfillmentForm } from "./fulfillment-form";
 import { PaymentPoller } from "./payment-poller";
@@ -53,9 +54,16 @@ async function OrderView({ params }: Pick<PageProps<"/[lang]/orders/[id]">, "par
   // 404 rather than 403 so order IDs can't be probed.
   if (!detail || (detail.order.userId !== userId && !isAdmin(userId))) notFound();
 
-  const { order, product, code, details } = detail;
-  const manual = product.deliveryType === "manual";
+  const { order, items, details } = detail;
+  const manualItems = items.filter((i) => i.deliveryType === "manual");
+  const manual = manualItems.length > 0;
   const needsDetails = manual && (order.status === "paid" || order.status === "processing");
+  const codeItems = items.filter((i) => i.codes.length > 0);
+  const waitingForCodes =
+    order.status === "paid" && items.some((i) => i.deliveryType === "automatic" && i.codes.length < i.quantity);
+  const manualInstructions = manualItems.filter((i) => i.instructions);
+  const highlight = [...new Set(manualItems.flatMap((i) => parseContactFields(i.requiredContactFields)))];
+  const title = items.length === 1 ? items[0].name : plural(locale, items.length, dict.cart.items);
 
   const steps = [
     { label: o.stepPlaced, done: true },
@@ -71,12 +79,15 @@ async function OrderView({ params }: Pick<PageProps<"/[lang]/orders/[id]">, "par
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs text-muted-foreground">{t(o.number, { id: order.id })}</p>
-              <h1 className="mt-1 text-2xl font-bold tracking-tight">{product.name}</h1>
+              <h1 className="mt-1 text-2xl font-bold tracking-tight">{title}</h1>
             </div>
             <OrderStatusBadge status={order.status} label={dict.status[order.status]} />
           </div>
 
           {order.status === "pending" && <PaymentPoller />}
+          <Suspense>
+            <ClearPurchasedFromCart productIds={items.map((i) => i.productId)} usedCoupon={!!order.couponCode} />
+          </Suspense>
 
           <ol className="mt-8 grid gap-4 sm:grid-cols-4" aria-label={o.progress}>
             {steps.map((s) => (
@@ -95,17 +106,20 @@ async function OrderView({ params }: Pick<PageProps<"/[lang]/orders/[id]">, "par
           </ol>
         </section>
 
-        {code && (
-          <section className="rounded-3xl border border-primary/30 bg-card p-6 sm:p-8">
+        {codeItems.map((item) => (
+          <section key={item.id} className="rounded-3xl border border-primary/30 bg-card p-6 sm:p-8">
             <h2 className="flex items-center gap-2 font-semibold">
               <KeyRoundIcon className="size-5 text-primary" /> {o.yourCode}
+              {items.length > 1 && <span className="font-normal text-muted-foreground">· {item.name}</span>}
             </h2>
-            <CopyCode code={code} />
-            {product.instructions && <p className="mt-4 text-sm text-muted-foreground">{product.instructions}</p>}
+            {item.codes.map((code) => (
+              <CopyCode key={code} code={code} />
+            ))}
+            {item.instructions && <p className="mt-4 text-sm text-muted-foreground">{item.instructions}</p>}
           </section>
-        )}
+        ))}
 
-        {!manual && order.status === "paid" && !code && (
+        {waitingForCodes && (
           <section className="flex gap-3 rounded-3xl border border-white/[0.06] bg-card p-6">
             <Loader2Icon className="mt-0.5 size-5 shrink-0 animate-spin text-primary" />
             <p className="text-sm text-muted-foreground">{o.preparing}</p>
@@ -118,10 +132,15 @@ async function OrderView({ params }: Pick<PageProps<"/[lang]/orders/[id]">, "par
               <MessageCircleIcon className="size-5 text-primary" />
               {details ? o.yourDetails : o.howReach}
             </h2>
-            {product.instructions && <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{product.instructions}</p>}
+            {manualInstructions.map((item) => (
+              <p key={item.id} className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                {manualInstructions.length > 1 && <span className="font-medium text-foreground">{item.name}: </span>}
+                {item.instructions}
+              </p>
+            ))}
             <FulfillmentForm
               orderId={order.id}
-              highlight={parseContactFields(product.requiredContactFields)}
+              highlight={highlight}
               initial={
                 details && {
                   discordUsername: details.discordUsername,
@@ -154,14 +173,37 @@ async function OrderView({ params }: Pick<PageProps<"/[lang]/orders/[id]">, "par
       </div>
 
       <aside className="h-fit space-y-3 rounded-3xl border border-white/[0.06] bg-card p-6 text-sm">
-        <Row label={o.product}>
-          <Link href={href(`/product/${product.slug}`)} className="hover:text-primary">
-            {product.name}
-          </Link>
-        </Row>
-        <Row label={o.total}>
-          <Price minor={order.amountMinor} currency={order.currency} className="font-semibold text-primary" />
-        </Row>
+        <div>
+          <p className="text-muted-foreground">{items.length === 1 ? o.product : o.items}</p>
+          <ul className="mt-2 space-y-2">
+            {items.map((item) => (
+              <li key={item.id} className="flex justify-between gap-4">
+                <Link href={href(`/product/${item.slug}`)} className="min-w-0 hover:text-primary">
+                  {item.name}
+                  {item.quantity > 1 && <span className="text-muted-foreground"> × {item.quantity}</span>}
+                </Link>
+                <Price minor={item.unitPriceMinor * item.quantity} currency={order.currency} className="shrink-0" />
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="space-y-3 border-t border-white/[0.06] pt-3">
+          {order.discountMinor > 0 && (
+            <>
+              <Row label={dict.cart.subtotal}>
+                <Price minor={order.subtotalMinor} currency={order.currency} />
+              </Row>
+              <Row label={order.couponCode ? `${dict.cart.discount} (${order.couponCode})` : dict.cart.discount}>
+                <span className="text-emerald-400">
+                  −<Price minor={order.discountMinor} currency={order.currency} />
+                </span>
+              </Row>
+            </>
+          )}
+          <Row label={o.total}>
+            <Price minor={order.amountMinor} currency={order.currency} className="font-semibold text-primary" />
+          </Row>
+        </div>
         <Row label={o.placed}>{formatDateTime(order.createdAt, locale)}</Row>
         {order.paidAt && <Row label={o.paid}>{formatDateTime(order.paidAt, locale)}</Row>}
         {order.deliveredAt && <Row label={o.delivered}>{formatDateTime(order.deliveredAt, locale)}</Row>}

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { PackageSearchIcon, ShoppingCartIcon } from "lucide-react";
 import { Reveal } from "@/components/motion/reveal";
+import { CheckoutNotice } from "@/components/shop/checkout-notice";
 import { ProductCard } from "@/components/shop/product-card";
 import { PageHero } from "@/components/site/page-hero";
 import { Button } from "@/components/ui/button";
@@ -28,6 +29,11 @@ export default async function MarketplacePage({ searchParams }: PageProps<"/[lan
       <PageHero icon={ShoppingCartIcon} title={dict.marketplace.title}>
         {dict.marketplace.description}
       </PageHero>
+      <Suspense>
+        <div className="container-page">
+          <CheckoutNotice />
+        </div>
+      </Suspense>
       <Suspense fallback={<MarketplaceSkeleton />}>
         <Marketplace searchParams={searchParams} />
       </Suspense>

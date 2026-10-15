@@ -83,7 +83,10 @@ export function OrdersList({ orders }: { orders: UserOrder[] }) {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">{o.categoryName}</span>
-                  <span className="block truncate font-semibold">{o.productName}</span>
+                  <span className="block truncate font-semibold">
+                    {o.productName}
+                    {o.moreCount > 0 && <span className="ml-1.5 text-xs font-normal text-muted-foreground">+{o.moreCount}</span>}
+                  </span>
                   <span className="block text-xs text-muted-foreground">
                     {t(p.orderLine, { id: o.id, date: formatDate(o.createdAt, locale) })}
                   </span>

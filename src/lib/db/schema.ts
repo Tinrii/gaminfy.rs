@@ -81,7 +81,7 @@ export const products = mysqlTable(
   (t) => [index("products_category_idx").on(t.categoryId)],
 );
 
-/** Pre-loaded digital codes for automatic delivery. A code is assigned to at most one order. */
+/** Pre-loaded digital codes for automatic delivery. Each code is assigned to at most one order item. */
 export const productCodes = mysqlTable(
   "product_codes",
   {
@@ -90,11 +90,16 @@ export const productCodes = mysqlTable(
       .notNull()
       .references(() => products.id),
     code: text("code").notNull(),
-    orderId: bigint("order_id", { mode: "number", unsigned: true }).unique(),
+    orderId: bigint("order_id", { mode: "number", unsigned: true }),
+    /** The order line this code was delivered for (one code per unit). */
+    orderItemId: bigint("order_item_id", { mode: "number", unsigned: true }),
     assignedAt: datetime("assigned_at", { mode: "date" }),
     ...timestamps,
   },
-  (t) => [index("product_codes_available_idx").on(t.productId, t.orderId)],
+  (t) => [
+    index("product_codes_available_idx").on(t.productId, t.orderId),
+    index("product_codes_item_idx").on(t.orderItemId),
+  ],
 );
 
 export const orders = mysqlTable(
@@ -104,11 +109,15 @@ export const orders = mysqlTable(
     userId: varchar("user_id", { length: 64 })
       .notNull()
       .references(() => users.id),
-    productId: bigint("product_id", { mode: "number", unsigned: true })
-      .notNull()
-      .references(() => products.id),
+    /** Sum of the order lines before any coupon. */
+    subtotalMinor: int("subtotal_minor").notNull().default(0),
+    discountMinor: int("discount_minor").notNull().default(0),
+    /** What the customer pays: subtotal − discount. */
     amountMinor: int("amount_minor").notNull(),
     currency: varchar("currency", { length: 3 }).notNull(),
+    couponId: bigint("coupon_id", { mode: "number", unsigned: true }),
+    /** Snapshot of the code used, kept even if the coupon is later edited or deleted. */
+    couponCode: varchar("coupon_code", { length: 40 }),
     /** Storefront language at checkout — emails are sent in it. */
     locale: varchar("locale", { length: 2 }).notNull().default("sr"),
     status: mysqlEnum("status", [
@@ -130,6 +139,43 @@ export const orders = mysqlTable(
   },
   (t) => [index("orders_user_idx").on(t.userId), index("orders_status_idx").on(t.status)],
 );
+
+/** One product line in an order. Name and price are snapshots taken at checkout. */
+export const orderItems = mysqlTable(
+  "order_items",
+  {
+    id: id(),
+    orderId: bigint("order_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => orders.id),
+    productId: bigint("product_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => products.id),
+    productName: varchar("product_name", { length: 200 }).notNull(),
+    quantity: int("quantity").notNull(),
+    unitPriceMinor: int("unit_price_minor").notNull(),
+    ...timestamps,
+  },
+  (t) => [index("order_items_order_idx").on(t.orderId)],
+);
+
+/** Discount codes managed in the admin panel: a fixed RSD amount or a percentage. */
+export const coupons = mysqlTable("coupons", {
+  id: id(),
+  /** Stored upper-case; customers can type it in any case. */
+  code: varchar("code", { length: 40 }).notNull().unique(),
+  type: mysqlEnum("type", ["fixed", "percent"]).notNull(),
+  /** fixed: amount in minor units (para); percent: whole percent 1–100. */
+  value: int("value").notNull(),
+  /** Optional minimum cart subtotal (minor units) for the code to apply. */
+  minSubtotalMinor: int("min_subtotal_minor"),
+  /** Optional cap on paid orders using this code; null = unlimited. */
+  maxUses: int("max_uses"),
+  usedCount: int("used_count").notNull().default(0),
+  expiresAt: datetime("expires_at", { mode: "date" }),
+  isActive: boolean("is_active").notNull().default(true),
+  ...timestamps,
+});
 
 /** Contact details a customer submits for a manually fulfilled order. Never passwords. */
 export const fulfillmentDetails = mysqlTable("fulfillment_details", {
@@ -168,5 +214,7 @@ export const stripeEvents = mysqlTable("stripe_events", {
 export type Category = typeof categories.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type Order = typeof orders.$inferSelect;
+export type OrderItem = typeof orderItems.$inferSelect;
+export type Coupon = typeof coupons.$inferSelect;
 export type OrderStatus = Order["status"];
 export type DeliveryType = Product["deliveryType"];

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 import { Show, useClerk, UserAvatar, useUser } from "@clerk/nextjs";
 import { LogOutIcon, MenuIcon, UserCogIcon, UserIcon } from "lucide-react";
+import { CartButton } from "@/components/shop/cart-sheet";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -57,6 +58,7 @@ export function SiteHeader() {
           <Suspense fallback={<LocaleSwitcherFallback className="hidden sm:inline-flex" />}>
             <LocaleSwitcher className="hidden sm:inline-flex" />
           </Suspense>
+          <CartButton />
           <AuthControls />
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>

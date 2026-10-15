@@ -13,15 +13,20 @@ const COPY = {
     footer: "Gaminfy · Digitalni gejming proizvodi",
     order: "Porudžbina",
     viewOrder: "Pogledaj porudžbinu",
-    codeSubject: (p: string, id: number) => `Tvoj kod za ${p} — porudžbina #${id}`,
-    codeTitle: "Tvoj kod je spreman",
-    codeIntro: "Hvala na kupovini! Evo tvog koda:",
+    subtotal: "Međuzbir",
+    discount: "Popust",
+    total: "Ukupno",
+    codesSubject: (id: number) => `Tvoji kodovi su spremni — porudžbina #${id}`,
+    codesTitle: "Tvoji kodovi su spremni",
+    codesIntro: "Hvala na kupovini! Ovo su tvoji kodovi:",
     paidSubject: (id: number) => `Plaćanje primljeno — porudžbina #${id}`,
     paidTitle: "Plaćanje primljeno",
-    manualIntro: "Hvala! Plaćanje je potvrđeno. Da bismo isporučili porudžbinu, potrebno nam je par podataka od tebe.",
-    manualAction: "Otvori porudžbinu i javi nam kako da te kontaktiramo — traje minut. Nikada ne šalji lozinku.",
+    paidIntro: "Hvala! Plaćanje je potvrđeno.",
+    codesBelow: "Kodovi koji su već spremni nalaze se ispod.",
+    manualAction:
+      "Za deo porudžbine koji isporučuje naš tim potrebni su nam tvoji kontakt podaci — otvori porudžbinu i popuni ih, traje minut. Nikada ne šalji lozinku.",
     addDetails: "Dodaj podatke za isporuku",
-    stockIntro: "Hvala! Plaćanje je potvrđeno. Naš tim priprema tvoj proizvod i uskoro ćeš ga dobiti — javićemo ti mejlom čim bude gotovo.",
+    stockNote: "Neki kodovi trenutno nisu na stanju — naš tim ih priprema i poslaćemo ti ih mejlom čim budu spremni.",
     deliveredSubject: (id: number) => `Isporučeno — porudžbina #${id}`,
     deliveredTitle: "Tvoja porudžbina je isporučena",
     deliveredIntro: "Odlične vesti — porudžbina je završena. Uživaj!",
@@ -31,15 +36,20 @@ const COPY = {
     footer: "Gaminfy · Digital gaming products",
     order: "Order",
     viewOrder: "View order",
-    codeSubject: (p: string, id: number) => `Your ${p} code — Order #${id}`,
-    codeTitle: "Your code is ready",
-    codeIntro: "Thanks for your purchase! Here's your code:",
+    subtotal: "Subtotal",
+    discount: "Discount",
+    total: "Total",
+    codesSubject: (id: number) => `Your codes are ready — Order #${id}`,
+    codesTitle: "Your codes are ready",
+    codesIntro: "Thanks for your purchase! Here are your codes:",
     paidSubject: (id: number) => `Payment received — Order #${id}`,
     paidTitle: "Payment received",
-    manualIntro: "Thanks! Your payment is confirmed. To deliver your order, our team needs a few details from you.",
-    manualAction: "Open your order and tell us how to reach you — it only takes a minute.",
+    paidIntro: "Thanks! Your payment is confirmed.",
+    codesBelow: "Codes that are already ready are below.",
+    manualAction:
+      "For the part of your order our team delivers, we need your contact details — open your order and add them, it only takes a minute.",
     addDetails: "Add delivery details",
-    stockIntro: "Thanks! Your payment is confirmed. Your product is being prepared by our team and will be delivered shortly — we'll email you as soon as it's done.",
+    stockNote: "Some codes are out of stock right now — our team is preparing them and we'll email them as soon as they're ready.",
     deliveredSubject: (id: number) => `Delivered — Order #${id}`,
     deliveredTitle: "Your order has been delivered",
     deliveredIntro: "Good news — your order is complete. Enjoy!",
@@ -64,55 +74,97 @@ const p = (text: string) => `<p style="margin:0 0 14px;font-size:14px;line-heigh
 const button = (href: string, label: string) =>
   `<a href="${href}" style="display:inline-block;margin-top:8px;background:#2ee38a;color:#00140f;font-weight:600;font-size:14px;text-decoration:none;padding:12px 20px;border-radius:10px">${esc(label)}</a>`;
 const codeBlock = (code: string) =>
-  `<div style="margin:6px 0 18px;padding:16px;border:1px dashed #2ee38a;border-radius:12px;font-family:Consolas,monospace;font-size:18px;letter-spacing:1px;color:#ffffff;word-break:break-all">${esc(code)}</div>`;
+  `<div style="margin:6px 0 10px;padding:14px 16px;border:1px dashed #2ee38a;border-radius:12px;font-family:Consolas,monospace;font-size:17px;letter-spacing:1px;color:#ffffff;word-break:break-all">${esc(code)}</div>`;
 
-type OrderInfo = { id: number; productName: string; amountMinor: number; currency: string; locale: Locale };
+export type EmailOrderItem = {
+  name: string;
+  quantity: number;
+  unitPriceMinor: number;
+  codes: string[];
+  instructions?: string | null;
+};
 
-function summary(o: OrderInfo) {
-  return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 18px;background:#001613;border-radius:12px">
-<tr><td style="padding:14px 16px;font-size:14px;color:#ffffff">${esc(o.productName)}</td>
-<td align="right" style="padding:14px 16px;font-size:14px;font-weight:600;color:#2ee38a">${formatPrice(o.amountMinor, o.currency, o.locale)}</td></tr>
-<tr><td colspan="2" style="padding:0 16px 14px;font-size:12px;color:#8eb0a5">${COPY[o.locale].order} #${o.id}</td></tr></table>`;
+export type EmailOrder = {
+  id: number;
+  locale: Locale;
+  currency: string;
+  subtotalMinor: number;
+  discountMinor: number;
+  amountMinor: number;
+  couponCode: string | null;
+  items: EmailOrderItem[];
+  /** Order contains products our team delivers by hand. */
+  hasManual: boolean;
+  /** Some automatic items are still waiting for codes. */
+  missingCodes: boolean;
+};
+
+function summary(o: EmailOrder) {
+  const c = COPY[o.locale];
+  const money = (m: number) => formatPrice(m, o.currency, o.locale);
+  const row = (left: string, right: string, color = "#cfe3dc", weight = 400) =>
+    `<tr><td style="padding:6px 16px;font-size:14px;color:${color};font-weight:${weight}">${left}</td><td align="right" style="padding:6px 16px;font-size:14px;color:${color};font-weight:${weight};white-space:nowrap">${right}</td></tr>`;
+  const lines = o.items
+    .map((i) =>
+      row(
+        `${esc(i.name)}${i.quantity > 1 ? ` <span style="color:#8eb0a5">× ${i.quantity}</span>` : ""}`,
+        money(i.unitPriceMinor * i.quantity),
+        "#ffffff",
+      ),
+    )
+    .join("");
+  const discount =
+    o.discountMinor > 0
+      ? row(c.subtotal, money(o.subtotalMinor)) +
+        row(`${c.discount}${o.couponCode ? ` (${esc(o.couponCode)})` : ""}`, `−${money(o.discountMinor)}`, "#2ee38a")
+      : "";
+  return `<table width="100%" cellpadding="0" cellspacing="0" style="margin:8px 0 18px;background:#001613;border-radius:12px;padding:8px 0">
+${lines}${discount}${row(c.total, money(o.amountMinor), "#2ee38a", 700)}
+<tr><td colspan="2" style="padding:4px 16px 8px;font-size:12px;color:#8eb0a5">${c.order} #${o.id}</td></tr></table>`;
 }
 
-const orderUrl = (o: OrderInfo) => `${SITE()}${localePath(o.locale, `/orders/${o.id}`)}`;
+function codesSection(o: EmailOrder) {
+  return o.items
+    .filter((i) => i.codes.length > 0)
+    .map(
+      (i) =>
+        `<p style="margin:14px 0 4px;font-size:13px;font-weight:600;color:#ffffff">${esc(i.name)}</p>` +
+        i.codes.map(codeBlock).join("") +
+        (i.instructions ? `<p style="margin:0 0 10px;font-size:12px;line-height:1.5;color:#8eb0a5">${esc(i.instructions)}</p>` : ""),
+    )
+    .join("");
+}
 
-export function codeDeliveredEmail(o: OrderInfo & { code: string; instructions?: string | null }) {
+const orderUrl = (o: EmailOrder) => `${SITE()}${localePath(o.locale, `/orders/${o.id}`)}`;
+
+/** Sent once payment is confirmed: codes, a request for delivery details, or both. */
+export function orderPaidEmail(o: EmailOrder) {
   const c = COPY[o.locale];
+  const complete = !o.hasManual && !o.missingCodes;
+  const codes = codesSection(o);
+  const body = complete
+    ? p(c.codesIntro) + codes + summary(o) + button(orderUrl(o), c.viewOrder)
+    : p(c.paidIntro) +
+      (o.missingCodes ? p(c.stockNote) : "") +
+      (o.hasManual ? p(c.manualAction) : "") +
+      (codes ? p(c.codesBelow) + codes : "") +
+      summary(o) +
+      button(orderUrl(o), o.hasManual ? c.addDetails : c.viewOrder);
   return {
-    subject: c.codeSubject(o.productName, o.id),
-    html: layout(
-      o.locale,
-      c.codeTitle,
-      p(c.codeIntro) + codeBlock(o.code) + summary(o) + (o.instructions ? p(esc(o.instructions)) : "") + button(orderUrl(o), c.viewOrder),
-    ),
+    subject: complete ? c.codesSubject(o.id) : c.paidSubject(o.id),
+    html: layout(o.locale, complete ? c.codesTitle : c.paidTitle, body),
   };
 }
 
-export function manualOrderPaidEmail(o: OrderInfo) {
-  const c = COPY[o.locale];
-  return {
-    subject: c.paidSubject(o.id),
-    html: layout(o.locale, c.paidTitle, p(c.manualIntro) + summary(o) + p(c.manualAction) + button(orderUrl(o), c.addDetails)),
-  };
-}
-
-export function awaitingStockEmail(o: OrderInfo) {
-  const c = COPY[o.locale];
-  return {
-    subject: c.paidSubject(o.id),
-    html: layout(o.locale, c.paidTitle, p(c.stockIntro) + summary(o) + button(orderUrl(o), c.viewOrder)),
-  };
-}
-
-export function orderDeliveredEmail(o: OrderInfo & { code?: string | null }) {
+/** Sent when the team marks an order delivered (includes every code assigned to it). */
+export function orderDeliveredEmail(o: EmailOrder) {
   const c = COPY[o.locale];
   return {
     subject: c.deliveredSubject(o.id),
     html: layout(
       o.locale,
       c.deliveredTitle,
-      p(c.deliveredIntro) + (o.code ? codeBlock(o.code) : "") + summary(o) + button(orderUrl(o), c.viewOrder),
+      p(c.deliveredIntro) + codesSection(o) + summary(o) + button(orderUrl(o), c.viewOrder),
     ),
   };
 }

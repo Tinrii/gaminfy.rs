@@ -5,14 +5,16 @@ import { ZapIcon } from "lucide-react";
 import { useI18n } from "@/i18n/client";
 import type { ProductCard as ProductCardData } from "@/lib/catalog";
 import { cn } from "@/lib/utils";
+import { AddToCartButton } from "./add-to-cart-button";
 import { Price } from "./price";
 import { ProductImage } from "./product-image";
 
 export function ProductCard({ product, priority }: { product: ProductCardData; priority?: boolean }) {
   const { dict, href } = useI18n();
+  // The whole card is clickable through the title link's stretched ::after, which
+  // keeps the add-to-cart button outside the link (no nested interactive elements).
   return (
-    <Link
-      href={href(`/product/${product.slug}`)}
+    <div
       data-reveal
       className={cn(
         "group relative flex flex-col rounded-2xl border border-white/[0.06] bg-card p-3 transition-[border-color,transform,box-shadow] duration-300",
@@ -48,9 +50,25 @@ export function ProductCard({ product, priority }: { product: ProductCardData; p
       </div>
       <div className="flex flex-1 flex-col gap-1 px-1 pt-3 pb-1">
         <p className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">{product.categoryName}</p>
-        <h3 className="line-clamp-2 text-sm leading-snug font-semibold text-foreground">{product.name}</h3>
-        <Price minor={product.priceMinor} currency={product.currency} className="mt-auto block pt-1 text-base font-semibold text-primary" />
+        <h3 className="line-clamp-2 text-sm leading-snug font-semibold text-foreground">
+          <Link
+            href={href(`/product/${product.slug}`)}
+            className="outline-none after:absolute after:inset-0 after:rounded-2xl focus-visible:after:ring-2 focus-visible:after:ring-primary"
+          >
+            {product.name}
+          </Link>
+        </h3>
+        <div className="mt-auto flex items-end justify-between gap-2 pt-1">
+          <Price minor={product.priceMinor} currency={product.currency} className="block text-base font-semibold text-primary" />
+          <AddToCartButton
+            productId={product.id}
+            productName={product.name}
+            disabled={!product.inStock}
+            variant="icon"
+            className="relative z-10 size-9"
+          />
+        </div>
       </div>
-    </Link>
+    </div>
   );
 }

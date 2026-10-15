@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FolderTreeIcon, LayoutDashboardIcon, MailIcon, PackageIcon, ReceiptTextIcon } from "lucide-react";
+import { FolderTreeIcon, LayoutDashboardIcon, MailIcon, PackageIcon, ReceiptTextIcon, TicketPercentIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ITEMS = [
@@ -10,6 +10,7 @@ const ITEMS = [
   { href: "/admin/orders", label: "Orders", icon: ReceiptTextIcon },
   { href: "/admin/products", label: "Products", icon: PackageIcon },
   { href: "/admin/categories", label: "Categories", icon: FolderTreeIcon },
+  { href: "/admin/coupons", label: "Coupons", icon: TicketPercentIcon },
   { href: "/admin/messages", label: "Messages", icon: MailIcon },
 ];
 

@@ -70,7 +70,10 @@ async function Overview() {
                     className="grid grid-cols-[3.5rem_1fr_auto] items-center gap-x-4 gap-y-1 px-5 py-3 text-sm hover:bg-white/[0.02] lg:grid-cols-[3.5rem_1fr_12rem_auto_6rem_8rem]"
                   >
                     <span className="text-muted-foreground">#{o.id}</span>
-                    <span className="truncate font-medium">{o.productName}</span>
+                    <span className="truncate font-medium">
+                      {o.productName}
+                      {o.moreCount > 0 && <span className="ml-1.5 text-xs font-normal text-muted-foreground">+{o.moreCount}</span>}
+                    </span>
                     <span className="hidden truncate text-xs text-muted-foreground lg:block">{o.customer}</span>
                     <OrderStatusBadge status={o.status} />
                     <span className="hidden text-right lg:block">{formatPrice(o.amountMinor, o.currency)}</span>

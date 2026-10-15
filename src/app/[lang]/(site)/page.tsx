@@ -6,7 +6,6 @@ import { CategoryCard } from "@/components/shop/category-card";
 import { Button } from "@/components/ui/button";
 import { getI18n } from "@/i18n/server";
 import { getCategories, getSiteStats } from "@/lib/catalog";
-import { COUNTRIES } from "@/lib/site";
 import { Hero } from "./_home/hero";
 import type { Metadata } from "next";
 import { pageMetadata } from "@/lib/seo";
@@ -24,7 +23,7 @@ export default async function HomePage() {
 
   return (
     <>
-      <Hero />
+      <Hero categories={categories.map((c) => ({ slug: c.slug, name: c.name, imageUrl: c.imageUrl }))} />
 
       <Reveal>
         <section className="container-page -mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -77,14 +76,10 @@ export default async function HomePage() {
             className="absolute inset-x-0 top-1/2 -z-10 mx-auto h-64 max-w-3xl -translate-y-1/2 rounded-full bg-primary/15 blur-[110px]"
           />
           <dl className="container-page grid grid-cols-2 gap-y-12 text-center lg:grid-cols-4">
+            <Stat label={dict.about.stats.yearsWithYou} value={<CountUp value={dict.about.stats.years} />} />
             <Stat label={dict.home.statGames} value={<CountUp value={stats.categories} />} />
-            <Stat label={dict.home.statProducts} value={<CountUp value={stats.products} />} />
-            {stats.deliveredOrders >= 100 ? (
-              <Stat label={dict.home.statDelivered} value={<CountUp value={stats.deliveredOrders} suffix="+" />} />
-            ) : (
-              <Stat label={dict.home.statDelivery} value={<span>&lt; 1h</span>} />
-            )}
-            <Stat label={dict.home.statRegions} value={<CountUp value={COUNTRIES.length} />} />
+            <Stat label={dict.home.statCustomers} value={<CountUp value="40.000+" />} />
+            <Stat label={dict.home.statDelivery} value={<span>0/24</span>} />
           </dl>
         </section>
       </Reveal>

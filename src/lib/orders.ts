@@ -1,27 +1,17 @@
 import "server-only";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Locale } from "@/i18n/config";
 import { db, schema } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
-import {
-  awaitingStockEmail,
-  codeDeliveredEmail,
-  manualOrderPaidEmail,
-  orderDeliveredEmail,
-} from "@/lib/email-templates";
+import { orderDeliveredEmail, orderPaidEmail, type EmailOrder } from "@/lib/email-templates";
 
-const { orders, products, productCodes, users, fulfillmentDetails, stripeEvents, categories } = schema;
-
-const productName = (locale: Locale) =>
-  locale === "en" ? sql<string>`coalesce(${products.nameEn}, ${products.name})` : sql<string>`${products.name}`;
+const { orders, orderItems, products, productCodes, users, fulfillmentDetails, stripeEvents, categories, coupons } =
+  schema;
 
 type Db = ReturnType<typeof db>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
 
-export type PaymentOutcome =
-  | { kind: "delivered"; orderId: number; code: string }
-  | { kind: "awaiting-details"; orderId: number }
-  | { kind: "awaiting-stock"; orderId: number };
+export type PaymentOutcome = { orderId: number };
 
 /**
  * Records a Stripe event and applies it exactly once. The event insert and the
@@ -40,9 +30,50 @@ export async function applyStripeEvent<T>(
 }
 
 /**
- * Moves a pending order to paid and fulfils it where possible. The order row and
- * the chosen code are locked, so concurrent webhooks can never hand the same code
- * to two orders (product_codes.order_id is also UNIQUE as a last line of defence).
+ * Assigns unassigned codes to an order's automatic lines (one per unit). Rows are
+ * locked with SKIP LOCKED, so two concurrent payments can never take the same code.
+ * Returns true when every automatic line is fully covered.
+ */
+async function assignCodes(tx: Tx, orderId: number): Promise<boolean> {
+  const lines = await tx
+    .select({ id: orderItems.id, productId: orderItems.productId, quantity: orderItems.quantity })
+    .from(orderItems)
+    .innerJoin(products, eq(orderItems.productId, products.id))
+    .where(and(eq(orderItems.orderId, orderId), eq(products.deliveryType, "automatic")));
+
+  let complete = true;
+  const now = new Date();
+  for (const line of lines) {
+    const [{ have }] = await tx
+      .select({ have: sql<number>`count(*)` })
+      .from(productCodes)
+      .where(eq(productCodes.orderItemId, line.id));
+    const missing = line.quantity - Number(have);
+    if (missing <= 0) continue;
+
+    const free = await tx
+      .select({ id: productCodes.id })
+      .from(productCodes)
+      .where(and(eq(productCodes.productId, line.productId), isNull(productCodes.orderId)))
+      .orderBy(productCodes.id)
+      .limit(missing)
+      .for("update", { skipLocked: true });
+
+    if (free.length) {
+      await tx
+        .update(productCodes)
+        .set({ orderId, orderItemId: line.id, assignedAt: now })
+        .where(inArray(productCodes.id, free.map((c) => c.id)));
+    }
+    if (free.length < missing) complete = false;
+  }
+  return complete;
+}
+
+/**
+ * Moves a pending order to paid and fulfils what it can: codes for automatic lines,
+ * stock decrements for manual ones, and one use of the coupon. The order is
+ * "delivered" right away only when it is all codes and every code was available.
  */
 export async function markOrderPaid(
   tx: Tx,
@@ -52,49 +83,60 @@ export async function markOrderPaid(
   const [order] = await tx.select().from(orders).where(eq(orders.id, orderId)).for("update");
   if (!order || order.status !== "pending") return null;
 
-  const [product] = await tx.select().from(products).where(eq(products.id, order.productId));
-  const now = new Date();
+  const lines = await tx
+    .select({ productId: orderItems.productId, quantity: orderItems.quantity, deliveryType: products.deliveryType })
+    .from(orderItems)
+    .innerJoin(products, eq(orderItems.productId, products.id))
+    .where(eq(orderItems.orderId, orderId));
 
-  if (product.deliveryType === "automatic") {
-    const [code] = await tx
-      .select({ id: productCodes.id, code: productCodes.code })
-      .from(productCodes)
-      .where(and(eq(productCodes.productId, product.id), isNull(productCodes.orderId)))
-      .orderBy(productCodes.id)
-      .limit(1)
-      .for("update", { skipLocked: true });
+  const codesComplete = await assignCodes(tx, orderId);
 
-    if (code) {
-      await tx
-        .update(productCodes)
-        .set({ orderId: order.id, assignedAt: now })
-        .where(eq(productCodes.id, code.id));
-      await tx
-        .update(orders)
-        .set({ status: "delivered", paidAt: now, deliveredAt: now, stripePaymentIntentId: paymentIntentId })
-        .where(eq(orders.id, order.id));
-      return { kind: "delivered", orderId: order.id, code: code.code };
-    }
-
-    // Sold out between checkout and payment — the team restocks or refunds from the admin panel.
-    await tx
-      .update(orders)
-      .set({ status: "paid", paidAt: now, stripePaymentIntentId: paymentIntentId })
-      .where(eq(orders.id, order.id));
-    return { kind: "awaiting-stock", orderId: order.id };
-  }
-
-  if (product.manualStock !== null) {
+  for (const line of lines.filter((l) => l.deliveryType === "manual")) {
     await tx
       .update(products)
-      .set({ manualStock: sql`greatest(${products.manualStock} - 1, 0)` })
-      .where(eq(products.id, product.id));
+      .set({ manualStock: sql`greatest(${products.manualStock} - ${line.quantity}, 0)` })
+      .where(and(eq(products.id, line.productId), sql`${products.manualStock} is not null`));
   }
+
+  if (order.couponId) {
+    await tx
+      .update(coupons)
+      .set({ usedCount: sql`${coupons.usedCount} + 1` })
+      .where(eq(coupons.id, order.couponId));
+  }
+
+  const hasManual = lines.some((l) => l.deliveryType === "manual");
+  const now = new Date();
+  const delivered = !hasManual && codesComplete;
   await tx
     .update(orders)
-    .set({ status: "paid", paidAt: now, stripePaymentIntentId: paymentIntentId })
+    .set({
+      status: delivered ? "delivered" : "paid",
+      paidAt: now,
+      deliveredAt: delivered ? now : null,
+      stripePaymentIntentId: paymentIntentId,
+    })
     .where(eq(orders.id, order.id));
-  return { kind: "awaiting-details", orderId: order.id };
+
+  return { orderId: order.id };
+}
+
+/** For paid orders that came in while a product was out of codes. Returns true if now complete. */
+export async function fillMissingCodes(orderId: number): Promise<"ok" | "partial" | "bad-status"> {
+  return db().transaction(async (tx) => {
+    const [order] = await tx.select().from(orders).where(eq(orders.id, orderId)).for("update");
+    if (!order || (order.status !== "paid" && order.status !== "processing")) return "bad-status";
+    const complete = await assignCodes(tx, orderId);
+    const [{ manual }] = await tx
+      .select({ manual: sql<number>`count(*)` })
+      .from(orderItems)
+      .innerJoin(products, eq(orderItems.productId, products.id))
+      .where(and(eq(orderItems.orderId, orderId), eq(products.deliveryType, "manual")));
+    if (complete && Number(manual) === 0) {
+      await tx.update(orders).set({ status: "delivered", deliveredAt: new Date() }).where(eq(orders.id, orderId));
+    }
+    return complete ? "ok" : "partial";
+  });
 }
 
 export async function markOrderUnpaid(tx: Tx, orderId: number, status: "cancelled" | "failed") {
@@ -104,78 +146,84 @@ export async function markOrderUnpaid(tx: Tx, orderId: number, status: "cancelle
     .where(and(eq(orders.id, orderId), eq(orders.status, "pending")));
 }
 
-async function emailContext(orderId: number) {
-  const [row] = await db()
-    .select({
-      id: orders.id,
-      amountMinor: orders.amountMinor,
-      currency: orders.currency,
-      locale: orders.locale,
-      name: products.name,
-      nameEn: products.nameEn,
-      instructions: products.instructions,
-      instructionsEn: products.instructionsEn,
-      email: users.email,
-    })
-    .from(orders)
-    .innerJoin(products, eq(orders.productId, products.id))
-    .innerJoin(users, eq(orders.userId, users.id))
-    .where(eq(orders.id, orderId));
-  if (!row) return undefined;
-  const locale: Locale = row.locale === "en" ? "en" : "sr";
-  return {
-    id: row.id,
-    amountMinor: row.amountMinor,
-    currency: row.currency,
-    email: row.email,
-    locale,
-    productName: locale === "en" ? (row.nameEn ?? row.name) : row.name,
-    instructions: locale === "en" ? (row.instructionsEn ?? row.instructions) : row.instructions,
-  };
+/* Detail reads */
+
+const name = (locale: Locale) =>
+  locale === "en"
+    ? sql<string>`coalesce(${products.nameEn}, ${products.name}, ${orderItems.productName})`
+    : sql<string>`coalesce(${products.name}, ${orderItems.productName})`;
+
+/** Lines of one or more orders with their assigned codes, in the given language. */
+async function loadItems(orderIds: number[], locale: Locale) {
+  if (!orderIds.length) return [];
+  const [lines, codes] = await Promise.all([
+    db()
+      .select({
+        id: orderItems.id,
+        orderId: orderItems.orderId,
+        productId: orderItems.productId,
+        quantity: orderItems.quantity,
+        unitPriceMinor: orderItems.unitPriceMinor,
+        name: name(locale),
+        slug: products.slug,
+        deliveryType: products.deliveryType,
+        instructions:
+          locale === "en"
+            ? sql<string | null>`coalesce(${products.instructionsEn}, ${products.instructions})`
+            : products.instructions,
+        requiredContactFields: products.requiredContactFields,
+        imageUrl: sql<string | null>`coalesce(${products.imageUrl}, ${categories.thumbUrl}, ${categories.imageUrl})`,
+        categoryName: categories.name,
+      })
+      .from(orderItems)
+      .innerJoin(products, eq(orderItems.productId, products.id))
+      .innerJoin(categories, eq(products.categoryId, categories.id))
+      .where(inArray(orderItems.orderId, orderIds))
+      .orderBy(orderItems.id),
+    db()
+      .select({ orderItemId: productCodes.orderItemId, code: productCodes.code })
+      .from(productCodes)
+      .where(inArray(productCodes.orderId, orderIds))
+      .orderBy(productCodes.id),
+  ]);
+  return lines.map((l) => ({
+    ...l,
+    codes: codes.filter((c) => c.orderItemId === l.id).map((c) => c.code),
+  }));
 }
 
-/** Sends the right email after a payment was applied (outside the transaction). */
-export async function notifyPayment(outcome: PaymentOutcome) {
-  const o = await emailContext(outcome.orderId);
-  if (!o?.email) return;
-  const mail =
-    outcome.kind === "delivered"
-      ? codeDeliveredEmail({ ...o, code: outcome.code })
-      : outcome.kind === "awaiting-details"
-        ? manualOrderPaidEmail(o)
-        : awaitingStockEmail(o);
-  await sendEmail({ to: o.email, ...mail });
-}
-
-export async function notifyDelivered(orderId: number) {
-  const o = await emailContext(orderId);
-  if (!o?.email) return;
-  const [code] = await db()
-    .select({ code: productCodes.code })
-    .from(productCodes)
-    .where(eq(productCodes.orderId, orderId));
-  await sendEmail({ to: o.email, ...orderDeliveredEmail({ ...o, code: code?.code }) });
-}
+export type OrderLine = Awaited<ReturnType<typeof loadItems>>[number];
 
 export async function getUserOrders(userId: string, locale: Locale) {
-  return db()
+  const rows = await db()
     .select({
       id: orders.id,
       status: orders.status,
       amountMinor: orders.amountMinor,
       currency: orders.currency,
       createdAt: orders.createdAt,
-      productName: productName(locale),
-      productSlug: products.slug,
-      deliveryType: products.deliveryType,
-      imageUrl: sql<string | null>`coalesce(${products.imageUrl}, ${categories.thumbUrl}, ${categories.imageUrl})`,
-      categoryName: categories.name,
     })
     .from(orders)
-    .innerJoin(products, eq(orders.productId, products.id))
-    .innerJoin(categories, eq(products.categoryId, categories.id))
     .where(eq(orders.userId, userId))
     .orderBy(desc(orders.createdAt));
+
+  const items = await loadItems(
+    rows.map((r) => r.id),
+    locale,
+  );
+  return rows.map((r) => {
+    const lines = items.filter((i) => i.orderId === r.id);
+    const first = lines[0];
+    return {
+      ...r,
+      productName: first?.name ?? "—",
+      imageUrl: first?.imageUrl ?? null,
+      categoryName: first?.categoryName ?? "",
+      /** How many other products the order contains (for "+2"). */
+      moreCount: Math.max(0, lines.length - 1),
+      itemCount: lines.reduce((sum, l) => sum + l.quantity, 0),
+    };
+  });
 }
 
 export type UserOrder = Awaited<ReturnType<typeof getUserOrders>>[number];
@@ -185,28 +233,61 @@ export async function getOrderDetail(orderId: number, locale: Locale = "en") {
   const [row] = await db()
     .select({
       order: orders,
-      product: {
-        id: products.id,
-        name: productName(locale),
-        slug: products.slug,
-        deliveryType: products.deliveryType,
-        instructions:
-          locale === "en"
-            ? sql<string | null>`coalesce(${products.instructionsEn}, ${products.instructions})`
-            : products.instructions,
-        requiredContactFields: products.requiredContactFields,
-      },
       user: { id: users.id, email: users.email, displayName: users.displayName },
     })
     .from(orders)
-    .innerJoin(products, eq(orders.productId, products.id))
     .innerJoin(users, eq(orders.userId, users.id))
     .where(eq(orders.id, orderId));
   if (!row) return null;
 
-  const [[code], [details]] = await Promise.all([
-    db().select({ code: productCodes.code }).from(productCodes).where(eq(productCodes.orderId, orderId)),
+  const [items, [details]] = await Promise.all([
+    loadItems([orderId], locale),
     db().select().from(fulfillmentDetails).where(eq(fulfillmentDetails.orderId, orderId)),
   ]);
-  return { ...row, code: code?.code ?? null, details: details ?? null };
+  return { ...row, items, details: details ?? null };
+}
+
+/* Emails */
+
+async function emailOrder(orderId: number): Promise<{ to: string; order: EmailOrder } | null> {
+  const [row] = await db()
+    .select({ order: orders, email: users.email })
+    .from(orders)
+    .innerJoin(users, eq(orders.userId, users.id))
+    .where(eq(orders.id, orderId));
+  if (!row?.email) return null;
+  const locale: Locale = row.order.locale === "en" ? "en" : "sr";
+  const items = await loadItems([orderId], locale);
+  return {
+    to: row.email,
+    order: {
+      id: row.order.id,
+      locale,
+      currency: row.order.currency,
+      subtotalMinor: row.order.subtotalMinor,
+      discountMinor: row.order.discountMinor,
+      amountMinor: row.order.amountMinor,
+      couponCode: row.order.couponCode,
+      items: items.map((i) => ({
+        name: i.name,
+        quantity: i.quantity,
+        unitPriceMinor: i.unitPriceMinor,
+        codes: i.codes,
+        instructions: i.codes.length ? i.instructions : null,
+      })),
+      hasManual: items.some((i) => i.deliveryType === "manual"),
+      missingCodes: items.some((i) => i.deliveryType === "automatic" && i.codes.length < i.quantity),
+    },
+  };
+}
+
+/** Sends the payment confirmation (with any codes) — outside the payment transaction. */
+export async function notifyPayment(outcome: PaymentOutcome) {
+  const mail = await emailOrder(outcome.orderId);
+  if (mail) await sendEmail({ to: mail.to, ...orderPaidEmail(mail.order) });
+}
+
+export async function notifyDelivered(orderId: number) {
+  const mail = await emailOrder(orderId);
+  if (mail) await sendEmail({ to: mail.to, ...orderDeliveredEmail(mail.order) });
 }

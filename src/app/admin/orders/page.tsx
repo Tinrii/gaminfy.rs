@@ -82,7 +82,9 @@ async function Orders({ searchParams }: Pick<PageProps<"/admin/orders">, "search
                   </TableCell>
                   <TableCell className="max-w-56 truncate">
                     {o.productName}
+                    {o.moreCount > 0 && <span className="ml-1.5 text-xs text-muted-foreground">+{o.moreCount} more</span>}
                     <span className="ml-2 text-xs text-muted-foreground">{o.deliveryType === "manual" ? "manual" : "code"}</span>
+                    {o.couponCode && <span className="ml-2 text-xs text-gold">{o.couponCode}</span>}
                   </TableCell>
                   <TableCell className="max-w-48 truncate text-muted-foreground">{o.customer}</TableCell>
                   <TableCell>

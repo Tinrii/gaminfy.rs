@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import { Poppins } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { srRS } from "@clerk/localizations";
+import { CartProvider } from "@/components/shop/cart-context";
+import { CartSheet } from "@/components/shop/cart-sheet";
 import { Toaster } from "@/components/ui/sonner";
 import { CurrencyProvider, I18nProvider } from "@/i18n/client";
 import { LOCALES } from "@/i18n/config";
@@ -53,9 +55,14 @@ export default async function RootLayout({ children }: LayoutProps<"/[lang]">) {
         <JsonLd data={[organizationLd(), websiteLd(locale)]} />
         <ClerkProvider appearance={clerkAppearance} localization={locale === "sr" ? srRS : undefined}>
           <I18nProvider locale={locale}>
-            <CurrencyProvider rates={rates}>{children}</CurrencyProvider>
+            <CurrencyProvider rates={rates}>
+              <CartProvider>
+                {children}
+                <CartSheet />
+              </CartProvider>
+            </CurrencyProvider>
           </I18nProvider>
-          <Toaster position="bottom-right" />
+          <Toaster position="bottom-right" offset={{ bottom: 96, right: 24 }} mobileOffset={{ bottom: 88 }} />
         </ClerkProvider>
       </body>
     </html>
