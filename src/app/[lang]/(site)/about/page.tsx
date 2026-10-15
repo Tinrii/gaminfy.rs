@@ -28,7 +28,7 @@ export default async function AboutPage() {
 
   const numbers = [
     { label: a.stats.games, value: <CountUp value={stats.categories} /> },
-    { label: a.stats.products, value: <CountUp value={stats.products} /> },
+    { label: a.stats.yearsWithYou, value: <CountUp value={a.stats.years} /> },
     { label: a.stats.regions, value: <CountUp value={COUNTRIES.length} /> },
     { label: a.stats.delivery, value: <>&lt;1h</> },
   ];
