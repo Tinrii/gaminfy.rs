@@ -15,16 +15,19 @@ const selectClass = "h-10 w-full rounded-xl border border-input bg-background px
 export function ProductForm({
   product,
   categories,
+  subcategories,
   images,
   uploadsEnabled,
 }: {
   product?: Product;
   categories: { id: number; name: string; imageUrl: string | null }[];
+  subcategories: { id: number; categoryId: number; name: string }[];
   images: string[];
   uploadsEnabled: boolean;
 }) {
   const [categoryId, setCategoryId] = useState(String(product?.categoryId ?? ""));
   const categoryImage = categories.find((c) => String(c.id) === categoryId)?.imageUrl ?? null;
+  const subOptions = subcategories.filter((s) => String(s.categoryId) === categoryId);
   const [delivery, setDelivery] = useState(product?.deliveryType ?? "automatic");
   const contact = parseContactFields(product?.requiredContactFields);
 
@@ -59,6 +62,25 @@ export function ProductForm({
             ))}
           </select>
         </Field>
+        {subOptions.length > 0 && (
+          <Field label="Subcategory" htmlFor="subcategoryId" hint="Optional — groups the product inside its game.">
+            {/* Re-mounted per category so a stale choice from another game is never submitted. */}
+            <select
+              key={categoryId}
+              id="subcategoryId"
+              name="subcategoryId"
+              defaultValue={String(product?.categoryId) === categoryId ? (product?.subcategoryId ?? "") : ""}
+              className={selectClass}
+            >
+              <option value="">None</option>
+              {subOptions.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
         <div className="grid grid-cols-[1fr_6rem] gap-3">
           <Field label="Price" htmlFor="price" hint="In whole units, e.g. 1400 for 1,400 RSD.">
             <Input

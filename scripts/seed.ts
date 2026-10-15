@@ -6,17 +6,18 @@
  *   npm run db:seed
  */
 import { config } from "dotenv";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
 import mysql from "mysql2/promise";
-import { categories, products } from "../src/lib/db/schema";
+import { categories, products, subcategories } from "../src/lib/db/schema";
 
 config({ path: [".env.local", ".env"], quiet: true });
 
 type Delivery = "automatic" | "manual";
 type T = { sr: string; en: string };
 
-type SeedItem = { name: T; rsd: number; image?: string; description?: T };
+/** `sub` is the slug of one of the category's subcategories. */
+type SeedItem = { name: T; rsd: number; image?: string; description?: T; sub?: string };
 type SeedCategory = {
   slug: string;
   name: string;
@@ -24,6 +25,7 @@ type SeedCategory = {
   delivery: Delivery;
   instructions: T;
   requiredContactFields?: string;
+  subcategories?: { slug: string; name: T }[];
   items: SeedItem[];
 };
 
@@ -49,10 +51,17 @@ const CATALOG: SeedCategory[] = [
       en: "After payment, tell us the best way to reach you. Our team will contact you to load the V-Bucks onto your Epic account. Delivery within 1 hour.",
     },
     requiredContactFields: "discord,email,instagram",
+    subcategories: [
+      { slug: "v-bucks", name: { sr: "Fortnite Vbucksi", en: "Fortnite V-Bucks" } },
+      { slug: "packs", name: { sr: "Fortnite Pekovi", en: "Fortnite Packs" } },
+      { slug: "random-accounts", name: { sr: "Fortnite random nalozi", en: "Fortnite Random Accounts" } },
+      { slug: "accounts", name: { sr: "Fortnite nalozi", en: "Fortnite Accounts" } },
+    ],
     items: [
       ...[1000, 2000, 2800, 5000, 10000, 13500].map((v, i) => ({
         name: amount(v, "V-Bucks"),
         rsd: [700, 1400, 1800, 2700, 5200, 6500][i],
+        sub: "v-bucks",
       })),
       ...(
         [
@@ -67,6 +76,7 @@ const CATALOG: SeedCategory[] = [
       ).map(([range, rsd]) => ({
         name: { sr: `Nalog sa ${range} skinova`, en: `${range} Skins Account` },
         rsd,
+        sub: "random-accounts",
         image: "/games/fortnite-accounts.webp",
         description: {
           sr: "Full access Fortnite nalog sa nasumičnim skinovima u navedenom rasponu. Može se povezati na PSN, Xbox ili Nintendo. Garancija važi dok ne promeniš email naloga (3 meseca).",
@@ -76,6 +86,7 @@ const CATALOG: SeedCategory[] = [
       {
         name: { sr: "Full Season 3 nalog (20–70 skinova)", en: "Full Season 3 Account (20–70 Skins)" },
         rsd: 2500,
+        sub: "accounts",
         image: "/games/fortnite-accounts.webp",
         description: {
           sr: "Full access nalog sa kompletnom Season 3 i 20–70 skinova. Garancija dok ne promeniš email naloga (3 meseca).",
@@ -303,12 +314,27 @@ async function main() {
       .onDuplicateKeyUpdate({ set: { ...cat, updatedAt: sql`CURRENT_TIMESTAMP` } });
     const [row] = await db.select({ id: categories.id }).from(categories).where(eq(categories.slug, c.slug));
 
+    const subIds = new Map<string, number>();
+    for (const [si, sub] of (c.subcategories ?? []).entries()) {
+      const values = { categoryId: row.id, slug: sub.slug, name: sub.name.sr, nameEn: sub.name.en, sortOrder: si };
+      await db
+        .insert(subcategories)
+        .values(values)
+        .onDuplicateKeyUpdate({ set: { ...values, updatedAt: sql`CURRENT_TIMESTAMP` } });
+      const [s] = await db
+        .select({ id: subcategories.id })
+        .from(subcategories)
+        .where(and(eq(subcategories.categoryId, row.id), eq(subcategories.slug, sub.slug)));
+      subIds.set(sub.slug, s.id);
+    }
+
     for (const [pi, item] of c.items.entries()) {
       // Slugs come from the English name so URLs stay stable.
       const slug = `${c.slug}-${slugify(item.name.en)}`;
       const description = item.description ?? defaultDescription(item.name, c.delivery);
       const product = {
         categoryId: row.id,
+        subcategoryId: item.sub ? (subIds.get(item.sub) ?? null) : null,
         slug,
         name: item.name.sr,
         nameEn: item.name.en,

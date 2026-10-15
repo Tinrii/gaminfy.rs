@@ -3,7 +3,7 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { ArrowLeftIcon } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { listCategoriesAdmin, listKnownImages } from "@/lib/admin-data";
+import { listCategoriesAdmin, listKnownImages, listSubcategoriesAdmin } from "@/lib/admin-data";
 import { requireAdmin } from "@/lib/auth";
 import { uploadsEnabled } from "@/lib/storage";
 import { ProductForm } from "../product-form";
@@ -26,6 +26,6 @@ export default function NewProductPage() {
 
 async function NewProduct() {
   await requireAdmin();
-  const [cats, images] = await Promise.all([listCategoriesAdmin(), listKnownImages()]);
-  return <ProductForm categories={cats.map((c) => c.category)} images={images} uploadsEnabled={uploadsEnabled()} />;
+  const [cats, subs, images] = await Promise.all([listCategoriesAdmin(), listSubcategoriesAdmin(), listKnownImages()]);
+  return <ProductForm categories={cats.map((c) => c.category)} subcategories={subs} images={images} uploadsEnabled={uploadsEnabled()} />;
 }

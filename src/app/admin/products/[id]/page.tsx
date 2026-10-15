@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
-import { getProductAdmin, listCategoriesAdmin, listKnownImages } from "@/lib/admin-data";
+import { getProductAdmin, listCategoriesAdmin, listKnownImages, listSubcategoriesAdmin } from "@/lib/admin-data";
 import { requireAdmin } from "@/lib/auth";
 import { uploadsEnabled } from "@/lib/storage";
 import { formatDate } from "@/lib/format";
@@ -34,9 +34,10 @@ export default function EditProductPage({ params }: PageProps<"/admin/products/[
 async function EditProduct({ params }: Pick<PageProps<"/admin/products/[id]">, "params">) {
   await requireAdmin();
   const id = Number((await params).id);
-  const [data, cats, images] = await Promise.all([
+  const [data, cats, subs, images] = await Promise.all([
     Number.isInteger(id) ? getProductAdmin(id) : null,
     listCategoriesAdmin(),
+    listSubcategoriesAdmin(),
     listKnownImages(),
   ]);
   if (!data) notFound();
@@ -65,7 +66,7 @@ async function EditProduct({ params }: Pick<PageProps<"/admin/products/[id]">, "
         </div>
       </div>
 
-      <ProductForm product={product} categories={cats.map((c) => c.category)} images={images} uploadsEnabled={uploadsEnabled()} />
+      <ProductForm product={product} categories={cats.map((c) => c.category)} subcategories={subs} images={images} uploadsEnabled={uploadsEnabled()} />
 
       {product.deliveryType === "automatic" && (
         <section id="codes" className="scroll-mt-24 space-y-5 rounded-2xl border border-white/[0.06] bg-card p-6">

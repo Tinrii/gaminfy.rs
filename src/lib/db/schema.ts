@@ -8,6 +8,7 @@ import {
   mysqlEnum,
   mysqlTable,
   text,
+  uniqueIndex,
   varchar,
 } from "drizzle-orm/mysql-core";
 
@@ -50,6 +51,25 @@ export const categories = mysqlTable("categories", {
   ...timestamps,
 });
 
+/** Optional second level inside a category (e.g. Fortnite → V-Bucks, Accounts). */
+export const subcategories = mysqlTable(
+  "subcategories",
+  {
+    id: id(),
+    categoryId: bigint("category_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => categories.id),
+    slug: varchar("slug", { length: 80 }).notNull(),
+    /** Serbian (default) name; nameEn holds the English translation. */
+    name: varchar("name", { length: 120 }).notNull(),
+    nameEn: varchar("name_en", { length: 120 }),
+    sortOrder: int("sort_order").notNull().default(0),
+    isActive: boolean("is_active").notNull().default(true),
+    ...timestamps,
+  },
+  (t) => [uniqueIndex("subcategories_category_slug_unique").on(t.categoryId, t.slug)],
+);
+
 export const products = mysqlTable(
   "products",
   {
@@ -57,6 +77,8 @@ export const products = mysqlTable(
     categoryId: bigint("category_id", { mode: "number", unsigned: true })
       .notNull()
       .references(() => categories.id),
+    /** Must belong to categoryId; null = not in any subcategory. */
+    subcategoryId: bigint("subcategory_id", { mode: "number", unsigned: true }).references(() => subcategories.id),
     slug: varchar("slug", { length: 120 }).notNull().unique(),
     /** Serbian (default) copy; *En columns hold the English translation (falls back to Serbian). */
     name: varchar("name", { length: 200 }).notNull(),
@@ -106,9 +128,11 @@ export const orders = mysqlTable(
   "orders",
   {
     id: id(),
-    userId: varchar("user_id", { length: 64 })
-      .notNull()
-      .references(() => users.id),
+    /** Null for guest checkouts — those are identified by guestEmail + accessToken. */
+    userId: varchar("user_id", { length: 64 }).references(() => users.id),
+    guestEmail: varchar("guest_email", { length: 255 }),
+    /** Secret in the guest's order link; lets them open the order without an account. */
+    accessToken: varchar("access_token", { length: 64 }),
     /** Sum of the order lines before any coupon. */
     subtotalMinor: int("subtotal_minor").notNull().default(0),
     discountMinor: int("discount_minor").notNull().default(0),
@@ -212,6 +236,7 @@ export const stripeEvents = mysqlTable("stripe_events", {
 });
 
 export type Category = typeof categories.$inferSelect;
+export type Subcategory = typeof subcategories.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;

@@ -6,6 +6,7 @@ import { refresh } from "next/cache";
 import { z } from "zod";
 import type { Dictionary } from "@/i18n/dictionaries";
 import { db, schema } from "@/lib/db";
+import { canAccessOrder } from "@/lib/orders";
 
 const { orders, fulfillmentDetails } = schema;
 
@@ -38,7 +39,7 @@ export async function submitFulfillmentDetails(
   formData: FormData,
 ): Promise<FulfillmentState> {
   const { userId } = await auth();
-  if (!userId) return { error: "signIn" };
+  const token = formData.get("token");
 
   const parsed = schemaIn.safeParse({
     orderId: formData.get("orderId"),
@@ -57,7 +58,8 @@ export async function submitFulfillmentDetails(
 
   const [order] = await db().select().from(orders).where(eq(orders.id, orderId));
   // Ownership check on the server — never trust the orderId from the form alone.
-  if (!order || order.userId !== userId) return { error: "notFound" };
+  const viewer = { userId, isAdmin: false, token: typeof token === "string" ? token : null };
+  if (!order || !canAccessOrder(order, viewer)) return { error: "notFound" };
   if (order.status !== "paid" && order.status !== "processing") {
     return { error: "locked" };
   }

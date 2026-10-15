@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { SearchIcon, SlidersHorizontalIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CategorySearchInput, type SuggestCategory } from "@/components/shop/category-search-input";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useI18n } from "@/i18n/client";
@@ -10,7 +11,9 @@ import type { ProductSort } from "@/lib/catalog";
 
 /** Plain GET form: works without JS, and every filter state is a shareable URL. */
 export function MarketplaceFilters(props: {
+  categories: SuggestCategory[];
   category?: string;
+  sub?: string;
   q?: string;
   min?: number;
   max?: number;
@@ -30,18 +33,21 @@ export function MarketplaceFilters(props: {
       className="mt-6 grid gap-3 rounded-2xl border border-white/[0.06] bg-card/60 p-3 md:grid-cols-[1fr_auto_auto_auto] md:items-center"
     >
       {props.category && <input type="hidden" name="category" value={props.category} />}
+      {props.sub && <input type="hidden" name="sub" value={props.sub} />}
 
-      <label className="relative block">
-        <span className="sr-only">{m.searchLabel}</span>
-        <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          name="q"
-          type="search"
+      <div className="relative">
+        <label htmlFor="marketplace-search" className="sr-only">
+          {m.searchLabel}
+        </label>
+        <SearchIcon className="pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+        <CategorySearchInput
+          id="marketplace-search"
+          categories={props.categories}
           defaultValue={props.q}
           placeholder={m.searchPlaceholder}
-          className="h-10 rounded-xl pl-9"
+          className="h-10 w-full min-w-0 rounded-xl border border-input bg-transparent px-2.5 py-1 pl-9 text-base transition-colors outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
         />
-      </label>
+      </div>
 
       <fieldset className="flex items-center gap-2">
         <legend className="sr-only">{m.priceRange}</legend>

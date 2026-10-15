@@ -12,7 +12,7 @@ import { fillMissingCodes, notifyDelivered } from "@/lib/orders";
 import { putPublicObject } from "@/lib/storage";
 import sharp from "sharp";
 
-const { products, productCodes, categories, orders, orderItems, contactMessages, coupons } = schema;
+const { products, productCodes, categories, subcategories, orders, orderItems, contactMessages, coupons } = schema;
 
 export type AdminState = { ok?: boolean; error?: string; message?: string };
 
@@ -44,6 +44,7 @@ const productSchema = z.object({
   nameEn: optionalText(200),
   slug: text(120),
   categoryId: z.coerce.number().int().positive("Pick a category."),
+  subcategoryId: z.coerce.number().int().positive().nullable(),
   price: z.coerce.number().positive("Price must be greater than 0.").max(10_000_000),
   currency: z.string().trim().length(3).toUpperCase().default("RSD"),
   deliveryType: z.enum(["automatic", "manual"]),
@@ -71,6 +72,7 @@ export async function saveProduct(_prev: AdminState, formData: FormData): Promis
     nameEn: formData.get("nameEn") ?? "",
     slug: formData.get("slug") ?? "",
     categoryId: formData.get("categoryId"),
+    subcategoryId: formData.get("subcategoryId") || null,
     price: formData.get("price"),
     currency: formData.get("currency") || "RSD",
     deliveryType: formData.get("deliveryType"),
@@ -87,6 +89,13 @@ export async function saveProduct(_prev: AdminState, formData: FormData): Promis
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
 
   const { id, price, contactFields, slug, ...data } = parsed.data;
+  if (data.subcategoryId) {
+    const [sub] = await db()
+      .select({ categoryId: subcategories.categoryId })
+      .from(subcategories)
+      .where(eq(subcategories.id, data.subcategoryId));
+    if (sub?.categoryId !== data.categoryId) return { error: "That subcategory belongs to a different category." };
+  }
   const values = {
     ...data,
     slug: slugify(slug || data.nameEn || data.name),

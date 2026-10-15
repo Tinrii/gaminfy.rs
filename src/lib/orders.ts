@@ -1,4 +1,5 @@
 import "server-only";
+import { timingSafeEqual } from "node:crypto";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Locale } from "@/i18n/config";
 import { db, schema } from "@/lib/db";
@@ -146,6 +147,21 @@ export async function markOrderUnpaid(tx: Tx, orderId: number, status: "cancelle
     .where(and(eq(orders.id, orderId), eq(orders.status, "pending")));
 }
 
+/* Access */
+
+/** Signed-in owner, an admin, or a guest holding the order's link token. */
+export function canAccessOrder(
+  order: { userId: string | null; accessToken: string | null },
+  viewer: { userId: string | null; isAdmin: boolean; token?: string | null },
+): boolean {
+  if (viewer.isAdmin) return true;
+  if (viewer.userId && order.userId === viewer.userId) return true;
+  if (!order.accessToken || !viewer.token) return false;
+  const a = Buffer.from(order.accessToken);
+  const b = Buffer.from(viewer.token);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 /* Detail reads */
 
 const name = (locale: Locale) =>
@@ -236,7 +252,7 @@ export async function getOrderDetail(orderId: number, locale: Locale = "en") {
       user: { id: users.id, email: users.email, displayName: users.displayName },
     })
     .from(orders)
-    .innerJoin(users, eq(orders.userId, users.id))
+    .leftJoin(users, eq(orders.userId, users.id))
     .where(eq(orders.id, orderId));
   if (!row) return null;
 
@@ -244,16 +260,16 @@ export async function getOrderDetail(orderId: number, locale: Locale = "en") {
     loadItems([orderId], locale),
     db().select().from(fulfillmentDetails).where(eq(fulfillmentDetails.orderId, orderId)),
   ]);
-  return { ...row, items, details: details ?? null };
+  return { ...row, customerEmail: row.user?.email ?? row.order.guestEmail ?? "", items, details: details ?? null };
 }
 
 /* Emails */
 
 async function emailOrder(orderId: number): Promise<{ to: string; order: EmailOrder } | null> {
   const [row] = await db()
-    .select({ order: orders, email: users.email })
+    .select({ order: orders, email: sql<string | null>`coalesce(${users.email}, ${orders.guestEmail})` })
     .from(orders)
-    .innerJoin(users, eq(orders.userId, users.id))
+    .leftJoin(users, eq(orders.userId, users.id))
     .where(eq(orders.id, orderId));
   if (!row?.email) return null;
   const locale: Locale = row.order.locale === "en" ? "en" : "sr";
@@ -262,6 +278,7 @@ async function emailOrder(orderId: number): Promise<{ to: string; order: EmailOr
     to: row.email,
     order: {
       id: row.order.id,
+      accessToken: row.order.accessToken,
       locale,
       currency: row.order.currency,
       subtotalMinor: row.order.subtotalMinor,

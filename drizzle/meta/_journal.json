@@ -29,6 +29,13 @@
       "when": 1792018857998,
       "tag": "0003_drop_order_product",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1792093901609,
+      "tag": "0004_subcategories_and_guest_checkout",
+      "breakpoints": true
     }
   ]
 }

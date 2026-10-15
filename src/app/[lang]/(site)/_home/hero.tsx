@@ -5,11 +5,12 @@ import Link from "next/link";
 import { useRef } from "react";
 import { ArrowRightIcon, SearchIcon } from "lucide-react";
 import { gsap, MOTION_OK, useGSAP } from "@/components/motion/gsap";
+import { CategorySearchInput, type SuggestCategory } from "@/components/shop/category-search-input";
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/client";
 import { HeroCarousel, type HeroCategory } from "./hero-carousel";
 
-export function Hero({ categories }: { categories: HeroCategory[] }) {
+export function Hero({ categories, searchCategories }: { categories: HeroCategory[]; searchCategories: SuggestCategory[] }) {
   const { dict, href } = useI18n();
   const ref = useRef<HTMLElement>(null);
 
@@ -74,18 +75,19 @@ export function Hero({ categories }: { categories: HeroCategory[] }) {
             data-hero-fade
             action={href("/marketplace")}
             role="search"
-            className="mt-8 flex max-w-md items-center gap-2 rounded-2xl border border-white/[0.08] bg-card/80 p-1.5 pl-4 backdrop-blur focus-within:border-primary/50"
+            className="relative z-40 mt-8 flex max-w-md items-center gap-2 rounded-2xl border border-white/[0.08] bg-card/80 p-1.5 pl-4 backdrop-blur focus-within:border-primary/50"
           >
             <SearchIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
             <label htmlFor="hero-search" className="sr-only">
               {dict.hero.searchLabel}
             </label>
-            <input
+            {/* No `relative` wrapper: the suggestions popup spans the whole search bar. */}
+            <CategorySearchInput
               id="hero-search"
-              name="q"
-              type="search"
+              categories={searchCategories}
               placeholder={dict.hero.searchPlaceholder}
-              className="h-10 min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              wrapperClassName="min-w-0 flex-1"
+              className="h-10 w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
             <Button type="submit" className="h-10 rounded-xl px-5 font-semibold">
               {dict.hero.search}

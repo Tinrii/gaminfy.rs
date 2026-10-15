@@ -13,7 +13,16 @@ export function db(): Db {
   if (!globalForDb.gaminfyDb) {
     const pool = mysql.createPool({
       uri: env().DATABASE_URL,
-      connectionLimit: 5,
+      connectionLimit: 10,
+      // The DB is remote: routers/NAT silently drop idle TCP connections, and a query
+      // sent on such a dead socket hangs until TCP gives up (seen as a stuck
+      // "use cache" fill in dev). Keep-alive probes keep live sockets open and detect
+      // dead ones; idle extras are closed instead of being kept forever.
+      enableKeepAlive: true,
+      keepAliveInitialDelay: 10_000,
+      maxIdle: 2,
+      idleTimeout: 60_000,
+      connectTimeout: 10_000,
       // Enable once MariaDB on the Ubuntu host has TLS configured (DATABASE_SSL=true).
       ssl: env().DATABASE_SSL === "true" ? { rejectUnauthorized: true } : undefined,
     });

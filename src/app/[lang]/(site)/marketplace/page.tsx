@@ -11,9 +11,10 @@ import { ProductCard } from "@/components/shop/product-card";
 import { PageHero } from "@/components/site/page-hero";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getCategories, getProducts, PAGE_SIZE, type ProductQuery, type ProductSort } from "@/lib/catalog";
+import { getCategories, getProducts, getSubcategories, PAGE_SIZE, type ProductQuery, type ProductSort } from "@/lib/catalog";
 import { CategorySwitcher } from "./category-switcher";
 import { MarketplaceFilters } from "./filters";
+import { SubcategorySwitcher } from "./subcategory-switcher";
 
 export async function generateMetadata(): Promise<Metadata> {
   const { dict } = await getI18n();
@@ -52,9 +53,13 @@ async function Marketplace({ searchParams }: Pick<PageProps<"/[lang]/marketplace
   const { locale, dict, href } = await getI18n();
   const sp = await searchParams;
   const sort = one(sp.sort) as ProductSort | undefined;
+  const category = one(sp.category) || undefined;
+  const subcategories = category ? await getSubcategories(category, locale) : [];
   const query: ProductQuery = {
     locale,
-    category: one(sp.category) || undefined,
+    category,
+    // Unknown subcategory slugs are ignored rather than showing an empty page.
+    sub: subcategories.find((s) => s.slug === one(sp.sub))?.slug,
     q: one(sp.q)?.trim().slice(0, 80) || undefined,
     min: num(one(sp.min)),
     max: num(one(sp.max)),
@@ -65,6 +70,7 @@ async function Marketplace({ searchParams }: Pick<PageProps<"/[lang]/marketplace
 
   const [categories, { items, total }] = await Promise.all([getCategories(locale), getProducts({ ...query, limit })]);
   const active = categories.find((c) => c.slug === query.category);
+  const activeSub = subcategories.find((s) => s.slug === query.sub);
 
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries({ ...query, locale: undefined, inStock: undefined, stock: query.inStock ? "1" : undefined })) {
@@ -75,10 +81,15 @@ async function Marketplace({ searchParams }: Pick<PageProps<"/[lang]/marketplace
   return (
     <section className="container-page pb-28">
       <CategorySwitcher categories={categories} active={query.category} />
+      {active && subcategories.length > 0 && (
+        <SubcategorySwitcher category={active.slug} subcategories={subcategories} active={query.sub} />
+      )}
 
       <MarketplaceFilters
         key={`filters-${JSON.stringify(query)}`}
+        categories={categories.map((c) => ({ slug: c.slug, name: c.name, imageUrl: c.thumbUrl ?? c.imageUrl, offers: c.offers }))}
         category={query.category}
+        sub={query.sub}
         q={query.q}
         min={query.min}
         max={query.max}
@@ -88,7 +99,7 @@ async function Marketplace({ searchParams }: Pick<PageProps<"/[lang]/marketplace
 
       <div className="mt-8 mb-5 flex items-baseline justify-between gap-4">
         <h2 className="text-lg font-semibold">
-          {active ? active.name : query.q ? t(dict.marketplace.resultsFor, { q: query.q }) : dict.marketplace.allProducts}
+          {activeSub ? activeSub.name : active ? active.name : query.q ? t(dict.marketplace.resultsFor, { q: query.q }) : dict.marketplace.allProducts}
         </h2>
         <p className="text-xs text-muted-foreground">
           {plural(locale, total, dict.marketplace.productCount)}

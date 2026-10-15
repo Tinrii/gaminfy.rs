@@ -1,8 +1,10 @@
 "use server";
 
 import { auth } from "@clerk/nextjs/server";
+import { randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { z } from "zod";
 import { isLocale, localePath, type Locale } from "@/i18n/config";
 import type { Dictionary } from "@/i18n/dictionaries";
 import { quoteCart, type CartQuote } from "@/lib/cart";
@@ -22,7 +24,11 @@ export type CheckoutInput = {
   items: { productId: number; quantity: number }[];
   couponCode?: string | null;
   locale: string;
+  /** Checkout without an account: confirmation, codes and the order link go here. */
+  guestEmail?: string | null;
 };
+
+const guestEmailSchema = z.email().max(255);
 
 /** Live cart pricing for the cart drawer (public — no order is created). */
 export async function getCartQuote(input: CheckoutInput): Promise<CartQuote> {
@@ -40,7 +46,8 @@ export async function startCheckout(input: CheckoutInput): Promise<CheckoutState
   const path = (p: string) => localePath(locale, p);
 
   const { userId } = await auth();
-  if (!userId) redirect(`${path("/sign-in")}?redirect_url=${encodeURIComponent(path("/marketplace"))}`);
+  const guestEmail = userId ? null : guestEmailSchema.safeParse(input.guestEmail?.trim().toLowerCase()).data;
+  if (!userId && !guestEmail) return { error: "guestEmail" };
 
   const quote = await quoteCart(input.items, locale, input.couponCode);
   if (quote.lines.length === 0) return { error: "empty" };
@@ -51,12 +58,17 @@ export async function startCheckout(input: CheckoutInput): Promise<CheckoutState
 
   if (!paymentsEnabled()) return { error: "notLive" };
 
-  const user = await syncCurrentUser();
-  if (!user) redirect(path("/sign-in"));
+  const user = userId ? await syncCurrentUser() : null;
+  if (userId && !user) redirect(path("/sign-in"));
+  const email = user?.email || guestEmail || undefined;
+  // Guests have no session, so their order link carries this secret instead.
+  const accessToken = user ? null : randomBytes(32).toString("base64url");
 
   const orderId = await db().transaction(async (tx) => {
     const [res] = await tx.insert(orders).values({
-      userId: user.id,
+      userId: user?.id ?? null,
+      guestEmail: user ? null : guestEmail,
+      accessToken,
       subtotalMinor: quote.subtotalMinor,
       discountMinor: quote.discountMinor,
       amountMinor: quote.totalMinor,
@@ -105,10 +117,10 @@ export async function startCheckout(input: CheckoutInput): Promise<CheckoutState
         },
       })),
       ...(discount ? { discounts: [{ coupon: discount.id }] } : {}),
-      customer_email: user.email || undefined,
+      customer_email: email,
       client_reference_id: String(orderId),
       metadata: { orderId: String(orderId) },
-      success_url: `${SITE()}${path(`/orders/${orderId}`)}?checkout=success`,
+      success_url: `${SITE()}${path(`/orders/${orderId}`)}?${accessToken ? `token=${accessToken}&` : ""}checkout=success`,
       cancel_url: `${SITE()}${path("/marketplace")}?checkout=cancelled`,
       expires_at: Math.floor(Date.now() / 1000) + 30 * 60,
     });

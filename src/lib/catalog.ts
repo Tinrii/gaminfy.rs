@@ -4,7 +4,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import type { Locale } from "@/i18n/config";
 import { db, schema } from "@/lib/db";
 
-const { categories, products, orders } = schema;
+const { categories, subcategories, products, orders } = schema;
 
 export const CATALOG_TAG = "catalog";
 export const PAGE_SIZE = 10;
@@ -92,11 +92,38 @@ export async function getCategories(locale: Locale): Promise<CategoryWithCount[]
   return rows.map((r) => ({ ...r, offers: Number(r.offers) }));
 }
 
+export type SubcategoryWithCount = { id: number; slug: string; name: string; offers: number };
+
+/** Active subcategories of one category (empty for categories without any). */
+export async function getSubcategories(categorySlug: string, locale: Locale): Promise<SubcategoryWithCount[]> {
+  "use cache";
+  cacheTag(CATALOG_TAG);
+  cacheLife("hours");
+
+  const rows = await db()
+    .select({
+      id: subcategories.id,
+      slug: subcategories.slug,
+      name: tr<string>(subcategories.name, subcategories.nameEn, locale),
+      offers: sql<number>`count(${products.id})`,
+    })
+    .from(subcategories)
+    .innerJoin(categories, eq(subcategories.categoryId, categories.id))
+    .leftJoin(products, and(eq(products.subcategoryId, subcategories.id), eq(products.isActive, true)))
+    .where(and(eq(categories.slug, categorySlug), eq(subcategories.isActive, true)))
+    .groupBy(subcategories.id)
+    .orderBy(asc(subcategories.sortOrder), asc(subcategories.name));
+
+  return rows.map((r) => ({ ...r, offers: Number(r.offers) }));
+}
+
 export type ProductSort = "featured" | "price-asc" | "price-desc" | "name";
 
 export type ProductQuery = {
   locale: Locale;
   category?: string;
+  /** Subcategory slug; only applies together with `category`. */
+  sub?: string;
   q?: string;
   min?: number;
   max?: number;
@@ -112,6 +139,11 @@ export async function getProducts(query: ProductQuery): Promise<{ items: Product
 
   const filters: SQL[] = [eq(products.isActive, true), eq(categories.isActive, true)];
   if (query.category) filters.push(eq(categories.slug, query.category));
+  if (query.category && query.sub) {
+    filters.push(
+      sql`${products.subcategoryId} in (select s.\`id\` from \`subcategories\` s where s.\`slug\` = ${query.sub} and s.\`category_id\` = ${categories.id})`,
+    );
+  }
   if (query.q) {
     const term = `%${query.q.replace(/[%_\\]/g, "\\$&")}%`;
     filters.push(or(like(products.name, term), like(products.nameEn, term), like(categories.name, term))!);

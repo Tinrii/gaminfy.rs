@@ -6,7 +6,8 @@ import type { OrderStatus } from "@/lib/db/schema";
 
 // Every caller must run requireAdmin() first — these return data across all users.
 
-const { orders, orderItems, coupons, products, productCodes, categories, users, contactMessages, fulfillmentDetails } = schema;
+const { orders, orderItems, coupons, products, productCodes, categories, subcategories, users, contactMessages, fulfillmentDetails } =
+  schema;
 
 const freeCodes = sql<number>`${AVAILABLE_CODES_SQL}`;
 
@@ -49,11 +50,11 @@ export async function listOrders({ status, limit = 100 }: { status?: OrderStatus
       currency: orders.currency,
       couponCode: orders.couponCode,
       createdAt: orders.createdAt,
-      customer: users.email,
+      customer: sql<string>`coalesce(${users.email}, ${orders.guestEmail}, '—')`,
       hasDetails: sql<number>`${fulfillmentDetails.id} is not null`,
     })
     .from(orders)
-    .innerJoin(users, eq(orders.userId, users.id))
+    .leftJoin(users, eq(orders.userId, users.id))
     .leftJoin(fulfillmentDetails, eq(fulfillmentDetails.orderId, orders.id))
     .where(where)
     .orderBy(desc(orders.createdAt))
@@ -140,6 +141,13 @@ export async function listCategoriesAdmin() {
     })
     .from(categories)
     .orderBy(asc(categories.sortOrder), asc(categories.name));
+}
+
+export async function listSubcategoriesAdmin() {
+  return db()
+    .select({ id: subcategories.id, categoryId: subcategories.categoryId, name: subcategories.name })
+    .from(subcategories)
+    .orderBy(asc(subcategories.sortOrder), asc(subcategories.name));
 }
 
 export async function listMessages() {

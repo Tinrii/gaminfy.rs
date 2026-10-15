@@ -1,9 +1,12 @@
 import Link from "next/link";
-import { ArrowRightIcon, Gamepad2Icon, HeadsetIcon, ShieldCheckIcon, ZapIcon } from "lucide-react";
+import { ArrowRightIcon, Gamepad2Icon, HeadsetIcon, QuoteIcon, ShieldCheckIcon, StarIcon, ZapIcon } from "lucide-react";
 import { CountUp } from "@/components/motion/count-up";
+import { Marquee } from "@/components/motion/marquee";
 import { Reveal } from "@/components/motion/reveal";
 import { CategoryCard } from "@/components/shop/category-card";
 import { Button } from "@/components/ui/button";
+import { TESTIMONIALS, type Testimonial } from "@/content/testimonials";
+import type { Locale } from "@/i18n/config";
 import { getI18n } from "@/i18n/server";
 import { getCategories, getSiteStats } from "@/lib/catalog";
 import { Hero } from "./_home/hero";
@@ -23,7 +26,10 @@ export default async function HomePage() {
 
   return (
     <>
-      <Hero categories={categories.map((c) => ({ slug: c.slug, name: c.name, imageUrl: c.imageUrl }))} />
+      <Hero
+        categories={categories.map((c) => ({ slug: c.slug, name: c.name, imageUrl: c.imageUrl }))}
+        searchCategories={categories.map((c) => ({ slug: c.slug, name: c.name, imageUrl: c.thumbUrl ?? c.imageUrl, offers: c.offers }))}
+      />
 
       <Reveal>
         <section className="container-page -mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -114,7 +120,60 @@ export default async function HomePage() {
           </div>
         </section>
       </Reveal>
+
+      <section className="pb-28" aria-labelledby="testimonials-heading">
+        <Reveal>
+          <div data-reveal className="container-page mx-auto max-w-md text-center">
+            <h2 id="testimonials-heading" className="text-3xl font-bold tracking-tight sm:text-4xl">
+              {dict.home.testimonialsTitle}
+            </h2>
+            <p className="mt-3 text-sm text-muted-foreground">{dict.home.testimonialsSubtitle}</p>
+          </div>
+        </Reveal>
+        {/* Two rows drifting in opposite directions; each pauses on hover. */}
+        <div className="mt-12 space-y-4">
+          {[TESTIMONIALS.filter((_, i) => i % 2 === 0), TESTIMONIALS.filter((_, i) => i % 2 === 1)].map((row, r) => (
+            <Marquee key={r} reverse={r === 1} duration={60}>
+              {row.map((item) => (
+                <TestimonialCard key={item.name} item={item} locale={locale} ratingLabel={dict.home.ratingLabel} />
+              ))}
+            </Marquee>
+          ))}
+        </div>
+      </section>
     </>
+  );
+}
+
+function TestimonialCard({ item, locale, ratingLabel }: { item: Testimonial; locale: Locale; ratingLabel: string }) {
+  const initials = item.name
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .slice(0, 2);
+  return (
+    <figure className="relative flex w-[19rem] shrink-0 flex-col rounded-2xl border border-white/[0.06] bg-card p-5 sm:w-[22rem]">
+      <QuoteIcon aria-hidden className="absolute top-5 right-5 size-6 text-primary/20" />
+      <div className="flex gap-0.5" role="img" aria-label={ratingLabel.replace("{n}", String(item.rating))}>
+        {Array.from({ length: 5 }, (_, i) => (
+          <StarIcon
+            key={i}
+            aria-hidden
+            className={i < item.rating ? "size-4 fill-gold text-gold" : "size-4 text-muted-foreground/30"}
+          />
+        ))}
+      </div>
+      <blockquote className="mt-4 flex-1 text-sm leading-relaxed text-foreground/90">“{item.quote[locale]}”</blockquote>
+      <figcaption className="mt-5 flex items-center gap-3">
+        <span className="grid size-9 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+          {initials}
+        </span>
+        <span>
+          <span className="block text-sm font-semibold">{item.name}</span>
+          <span className="block text-xs text-muted-foreground">{item.product}</span>
+        </span>
+      </figcaption>
+    </figure>
   );
 }
 

@@ -31,7 +31,7 @@ async function AdminOrder({ params }: Pick<PageProps<"/admin/orders/[id]">, "par
   const detail = Number.isInteger(id) ? await getOrderDetail(id) : null;
   if (!detail) notFound();
 
-  const { order, user, items, details } = detail;
+  const { order, user, customerEmail, items, details } = detail;
   const hasManual = items.some((i) => i.deliveryType === "manual");
   const missing = items.filter((i) => i.deliveryType === "automatic" && i.codes.length < i.quantity);
   const canAssign = missing.length > 0 && (order.status === "paid" || order.status === "processing");
@@ -57,10 +57,11 @@ async function AdminOrder({ params }: Pick<PageProps<"/admin/orders/[id]">, "par
           </div>
           <dl className="mt-6 grid gap-3 text-sm sm:grid-cols-2">
             <Info label="Customer">
-              {user.displayName ? `${user.displayName} · ` : ""}
-              <a href={`mailto:${user.email}`} className="text-primary hover:underline">
-                {user.email}
+              {user?.displayName ? `${user.displayName} · ` : ""}
+              <a href={`mailto:${customerEmail}`} className="text-primary hover:underline">
+                {customerEmail}
               </a>
+              {!user && <span className="ml-2 text-xs text-muted-foreground">(guest)</span>}
             </Info>
             <Info label="Total">
               {formatPrice(order.amountMinor, order.currency)}

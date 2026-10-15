@@ -1,5 +1,6 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Loader2Icon, LockIcon, MinusIcon, PlusIcon, ShoppingCartIcon, TagIcon, Trash2Icon, XIcon } from "lucide-react";
@@ -14,6 +15,7 @@ import type { CartQuote } from "@/lib/cart";
 import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useCart } from "./cart-context";
+import { GuestCheckoutDialog } from "./guest-checkout-dialog";
 import { Price } from "./price";
 import { ProductImage } from "./product-image";
 
@@ -53,6 +55,8 @@ export function CartSheet() {
   const [couponError, setCouponError] = useState<string | null>(null);
   const [checkout, setCheckout] = useState<CheckoutState>({});
   const [checkingOut, startCheckingOut] = useTransition();
+  const { isSignedIn } = useAuth();
+  const [guestOpen, setGuestOpen] = useState(false);
   const requestId = useRef(0);
 
   // Re-quote whenever the drawer is open and the cart changes; stale responses are dropped.
@@ -109,10 +113,10 @@ export function CartSheet() {
     setCouponInput("");
   };
 
-  const goToCheckout = () =>
+  const goToCheckout = (guestEmail?: string) =>
     startCheckingOut(async () => {
       setCheckout({});
-      setCheckout(await startCheckout({ items, couponCode, locale }));
+      setCheckout(await startCheckout({ items, couponCode, locale, guestEmail }));
     });
 
   return (
@@ -320,7 +324,7 @@ export function CartSheet() {
                 </div>
               </dl>
 
-              {checkout.error && (
+              {checkout.error && !guestOpen && (
                 <Alert variant="destructive">
                   <AlertDescription>{dict.checkout[checkout.error]}</AlertDescription>
                 </Alert>
@@ -328,7 +332,7 @@ export function CartSheet() {
 
               <Button
                 size="lg"
-                onClick={goToCheckout}
+                onClick={() => (isSignedIn ? goToCheckout() : setGuestOpen(true))}
                 disabled={blocked || loading || checkingOut}
                 className="h-12 w-full rounded-xl text-base font-semibold"
               >
@@ -337,6 +341,16 @@ export function CartSheet() {
               </Button>
               <p className="text-center text-xs text-muted-foreground">{c.secure}</p>
             </div>
+            <GuestCheckoutDialog
+              open={guestOpen}
+              onOpenChange={(next) => {
+                setGuestOpen(next);
+                setCheckout({});
+              }}
+              onContinue={goToCheckout}
+              pending={checkingOut}
+              error={checkout.error && dict.checkout[checkout.error]}
+            />
           </>
         )}
       </SheetContent>

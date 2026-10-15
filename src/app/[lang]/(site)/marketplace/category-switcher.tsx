@@ -75,7 +75,7 @@ export function CategorySwitcher({ categories, active }: { categories: CategoryW
 
   const chip = (on: boolean) =>
     cn(
-      "group flex h-11 shrink-0 snap-start items-center gap-2.5 rounded-full py-1.5 pr-4 pl-1.5 text-sm whitespace-nowrap transition-colors",
+      "group flex h-11 w-full shrink-0 snap-start items-center gap-2.5 rounded-full py-1.5 pr-4 pl-1.5 text-sm whitespace-nowrap transition-colors",
       on
         ? "bg-primary font-semibold text-primary-foreground"
         : "bg-white/[0.04] text-muted-foreground hover:bg-white/[0.08] hover:text-foreground",
@@ -105,7 +105,14 @@ export function CategorySwitcher({ categories, active }: { categories: CategoryW
       </div>
 
       <div className="-mx-4 sm:mx-0">
-        <ul ref={listRef} className={cn("scrollbar-none flex snap-x gap-2 overflow-x-auto overscroll-x-contain px-4 sm:px-0", mask)}>
+        {/* Two rows that flow sideways; past the container width it scrolls (arrows above). */}
+        <ul
+          ref={listRef}
+          className={cn(
+            "scrollbar-none grid auto-cols-max grid-flow-col grid-rows-2 snap-x gap-2 overflow-x-auto overscroll-x-contain px-4 sm:px-0",
+            mask,
+          )}
+        >
           <li>
             <Link href={href("/marketplace")} scroll={false} aria-current={!active ? "page" : undefined} className={chip(!active)}>
               <span className={thumb(!active)}>

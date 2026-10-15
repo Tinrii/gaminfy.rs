@@ -1,9 +1,11 @@
 "use client";
 
+import { useAuth } from "@clerk/nextjs";
 import { useState, useTransition } from "react";
 import { Loader2Icon, ZapIcon } from "lucide-react";
 import { startCheckout, type CheckoutState } from "@/app/actions/checkout";
 import { AddToCartButton } from "@/components/shop/add-to-cart-button";
+import { GuestCheckoutDialog } from "@/components/shop/guest-checkout-dialog";
 import { Price } from "@/components/shop/price";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -25,11 +27,14 @@ export function BuyBox({
   const { locale, dict } = useI18n();
   const [state, setState] = useState<CheckoutState>({});
   const [pending, startTransition] = useTransition();
+  const { isSignedIn } = useAuth();
+  const [guestOpen, setGuestOpen] = useState(false);
 
   // "Buy now" skips the cart and checks out just this product.
-  const buyNow = () =>
+  const buyNow = (guestEmail?: string) =>
     startTransition(async () => {
-      setState(await startCheckout({ items: [{ productId, quantity: 1 }], locale }));
+      setState({});
+      setState(await startCheckout({ items: [{ productId, quantity: 1 }], locale, guestEmail }));
     });
 
   return (
@@ -44,7 +49,7 @@ export function BuyBox({
           <Button
             type="button"
             size="lg"
-            onClick={buyNow}
+            onClick={() => (isSignedIn ? buyNow() : setGuestOpen(true))}
             disabled={!inStock || pending}
             className="h-12 min-w-40 rounded-xl px-6 text-base font-semibold"
           >
@@ -53,11 +58,21 @@ export function BuyBox({
           </Button>
         </div>
       </div>
-      {state.error && (
+      {state.error && !guestOpen && (
         <Alert variant="destructive" className="mt-4">
           <AlertDescription>{dict.checkout[state.error]}</AlertDescription>
         </Alert>
       )}
+      <GuestCheckoutDialog
+        open={guestOpen}
+        onOpenChange={(next) => {
+          setGuestOpen(next);
+          setState({});
+        }}
+        onContinue={buyNow}
+        pending={pending}
+        error={state.error && dict.checkout[state.error]}
+      />
     </div>
   );
 }

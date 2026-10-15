@@ -86,6 +86,8 @@ export type EmailOrderItem = {
 
 export type EmailOrder = {
   id: number;
+  /** Guest orders: added to the order link so it opens without signing in. */
+  accessToken?: string | null;
   locale: Locale;
   currency: string;
   subtotalMinor: number;
@@ -135,7 +137,8 @@ function codesSection(o: EmailOrder) {
     .join("");
 }
 
-const orderUrl = (o: EmailOrder) => `${SITE()}${localePath(o.locale, `/orders/${o.id}`)}`;
+const orderUrl = (o: EmailOrder) =>
+  `${SITE()}${localePath(o.locale, `/orders/${o.id}`)}${o.accessToken ? `?token=${o.accessToken}` : ""}`;
 
 /** Sent once payment is confirmed: codes, a request for delivery details, or both. */
 export function orderPaidEmail(o: EmailOrder) {

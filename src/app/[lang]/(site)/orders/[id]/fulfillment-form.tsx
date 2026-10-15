@@ -28,10 +28,13 @@ const NAME: Record<ContactField, keyof NonNullable<Details>> = {
 
 export function FulfillmentForm({
   orderId,
+  token,
   highlight,
   initial,
 }: {
   orderId: number;
+  /** Guest orders prove access with the token from their order link. */
+  token?: string | null;
   highlight: ContactField[];
   initial: Details;
 }) {
@@ -50,6 +53,7 @@ export function FulfillmentForm({
   return (
     <form action={action} className="mt-6 space-y-5">
       <input type="hidden" name="orderId" value={orderId} />
+      {token && <input type="hidden" name="token" value={token} />}
       <p className="text-xs text-muted-foreground">{o.atLeastOne}</p>
       <div className="grid gap-4 sm:grid-cols-2">
         {fields.map((f) => (

@@ -1,12 +1,14 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { gsap, MOTION_OK, useGSAP } from "./gsap";
 
 /**
- * Infinite horizontal marquee. Children are rendered twice and the track slides by
- * half its width, so the loop is seamless. Pauses on hover; static with reduced motion.
+ * Infinite horizontal marquee. Children are repeated enough times to cover the
+ * container plus one extra copy, and the track slides by exactly one copy's width,
+ * so the loop is seamless and never leaves a gap on wide screens — in either
+ * direction. Pauses on hover; static with reduced motion.
  */
 export function Marquee({
   children,
@@ -20,15 +22,36 @@ export function Marquee({
   className?: string;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  const first = useRef<HTMLDivElement>(null);
+  const [{ copies, width }, setLayout] = useState({ copies: 2, width: 0 });
+
+  // One copy must always be off-screen to slide in, so: enough to fill the width, plus one.
+  useEffect(() => {
+    const el = root.current;
+    const copy = first.current;
+    if (!el || !copy) return;
+    const measure = () => {
+      const w = copy.offsetWidth;
+      if (w > 0) setLayout({ copies: Math.max(2, Math.ceil(el.clientWidth / w) + 1), width: w });
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    ro.observe(copy);
+    return () => ro.disconnect();
+  }, []);
 
   useGSAP(
     () => {
       const mm = gsap.matchMedia();
       mm.add(MOTION_OK, () => {
+        const w = width;
+        if (!w) return;
+        // Speed stays the same however many copies are rendered.
         const tween = gsap.fromTo(
           "[data-track]",
-          { xPercent: reverse ? -50 : 0 },
-          { xPercent: reverse ? 0 : -50, duration, ease: "none", repeat: -1 },
+          { x: reverse ? -w : 0 },
+          { x: reverse ? 0 : -w, duration, ease: "none", repeat: -1 },
         );
         const el = root.current!;
         const pause = () => tween.pause();
@@ -41,7 +64,7 @@ export function Marquee({
         };
       });
     },
-    { scope: root },
+    { scope: root, dependencies: [copies, width, reverse, duration], revertOnUpdate: true },
   );
 
   return (
@@ -53,10 +76,11 @@ export function Marquee({
       )}
     >
       <div data-track className="flex w-max">
-        <div className="flex shrink-0 gap-4 pr-4">{children}</div>
-        <div className="flex shrink-0 gap-4 pr-4" aria-hidden>
-          {children}
-        </div>
+        {Array.from({ length: copies }, (_, i) => (
+          <div key={i} ref={i === 0 ? first : undefined} className="flex shrink-0 gap-4 pr-4" aria-hidden={i > 0 || undefined}>
+            {children}
+          </div>
+        ))}
       </div>
     </div>
   );

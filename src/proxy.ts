@@ -4,11 +4,11 @@ import { DEFAULT_LOCALE, isLocale, LOCALE_COOKIE, LOCALES } from "@/i18n/config"
 
 // Optimistic redirect to sign-in only. Real authorization (ownership, admin role)
 // is enforced again on the server in pages, actions and route handlers.
+// Orders are not listed: guests open theirs with the token in their order link.
 const isProtectedRoute = createRouteMatcher([
   "/profile(.*)",
-  "/orders(.*)",
   "/admin(.*)",
-  ...LOCALES.map((l) => `/${l}/(profile|orders)(.*)`),
+  ...LOCALES.map((l) => `/${l}/profile(.*)`),
 ]);
 
 // Not localized: the admin panel, API routes, Clerk's internal endpoints and
