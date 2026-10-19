@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { ArrowRightIcon, Gamepad2Icon, HeadsetIcon, QuoteIcon, ShieldCheckIcon, StarIcon, ZapIcon } from "lucide-react";
 import { CountUp } from "@/components/motion/count-up";
-import { Marquee } from "@/components/motion/marquee";
 import { Reveal } from "@/components/motion/reveal";
 import { CategoryCard } from "@/components/shop/category-card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +9,7 @@ import type { Locale } from "@/i18n/config";
 import { getI18n } from "@/i18n/server";
 import { getCategories, getSiteStats } from "@/lib/catalog";
 import { Hero } from "./_home/hero";
+import { TestimonialsCarousel } from "./_home/testimonials-carousel";
 import type { Metadata } from "next";
 import { pageMetadata } from "@/lib/seo";
 
@@ -130,15 +130,12 @@ export default async function HomePage() {
             <p className="mt-3 text-sm text-muted-foreground">{dict.home.testimonialsSubtitle}</p>
           </div>
         </Reveal>
-        {/* Two rows drifting in opposite directions; each pauses on hover. */}
-        <div className="mt-12 space-y-4">
-          {[TESTIMONIALS.filter((_, i) => i % 2 === 0), TESTIMONIALS.filter((_, i) => i % 2 === 1)].map((row, r) => (
-            <Marquee key={r} reverse={r === 1} duration={60}>
-              {row.map((item) => (
-                <TestimonialCard key={item.name} item={item} locale={locale} ratingLabel={dict.home.ratingLabel} />
-              ))}
-            </Marquee>
-          ))}
+        <div className="container-page mt-12">
+          <TestimonialsCarousel>
+            {TESTIMONIALS.map((item) => (
+              <TestimonialCard key={item.name} item={item} locale={locale} ratingLabel={dict.home.ratingLabel} />
+            ))}
+          </TestimonialsCarousel>
         </div>
       </section>
     </>
@@ -152,7 +149,7 @@ function TestimonialCard({ item, locale, ratingLabel }: { item: Testimonial; loc
     .join("")
     .slice(0, 2);
   return (
-    <figure className="relative flex w-[19rem] shrink-0 flex-col rounded-2xl border border-white/[0.06] bg-card p-5 sm:w-[22rem]">
+    <figure className="relative flex h-full flex-col rounded-2xl border border-white/[0.06] bg-card p-5">
       <QuoteIcon aria-hidden className="absolute top-5 right-5 size-6 text-primary/20" />
       <div className="flex gap-0.5" role="img" aria-label={ratingLabel.replace("{n}", String(item.rating))}>
         {Array.from({ length: 5 }, (_, i) => (

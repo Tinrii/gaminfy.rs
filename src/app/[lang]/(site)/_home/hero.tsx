@@ -75,15 +75,16 @@ export function Hero({ categories, searchCategories }: { categories: HeroCategor
             data-hero-fade
             action={href("/marketplace")}
             role="search"
-            className="relative z-40 mt-8 flex max-w-md items-center gap-2 rounded-2xl border border-white/[0.08] bg-card/80 p-1.5 pl-4 backdrop-blur focus-within:border-primary/50"
+            className="mt-8 flex max-w-md items-center gap-2 rounded-2xl border border-white/[0.08] bg-card/80 p-1.5 pl-4 backdrop-blur focus-within:border-primary/50"
           >
             <SearchIcon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
             <label htmlFor="hero-search" className="sr-only">
               {dict.hero.searchLabel}
             </label>
-            {/* No `relative` wrapper: the suggestions popup spans the whole search bar. */}
+            {/* The suggestions popup spans the whole search bar. */}
             <CategorySearchInput
               id="hero-search"
+              anchor="form"
               categories={searchCategories}
               placeholder={dict.hero.searchPlaceholder}
               wrapperClassName="min-w-0 flex-1"

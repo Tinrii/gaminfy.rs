@@ -98,6 +98,22 @@ export function ProductForm({
             <Input id="currency" name="currency" maxLength={3} defaultValue={product?.currency ?? "RSD"} className="h-10 rounded-xl uppercase" />
           </Field>
         </div>
+        <Field
+          label="Official store price"
+          htmlFor="officialPrice"
+          hint="Optional — what the same item costs in the official in-game store, in the same currency. When it's higher than your price, the cart shows how much the customer saves."
+        >
+          <Input
+            id="officialPrice"
+            name="officialPrice"
+            type="number"
+            min={0}
+            step="0.01"
+            defaultValue={product?.officialPriceMinor != null ? product.officialPriceMinor / 100 : ""}
+            placeholder="e.g. 950"
+            className="h-10 rounded-xl"
+          />
+        </Field>
       </div>
 
       <fieldset className="space-y-3">

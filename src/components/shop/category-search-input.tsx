@@ -1,7 +1,8 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { ArrowRightIcon, Loader2Icon } from "lucide-react";
 import { suggestProducts, type ProductSuggestion } from "@/app/actions/search";
 import { useI18n } from "@/i18n/client";
@@ -31,8 +32,8 @@ type Option =
 /**
  * Search box (`name="q"`, submits with its form) that suggests matching games and
  * products while typing — games first. Picking one opens it right away.
- * The popup is positioned against the closest positioned ancestor; pass
- * `wrapperClassName` without `relative` to anchor it to a wider parent.
+ * The popup is portalled to <body> and placed under the input (or under its whole
+ * <form> with `anchor="form"`), so no parent's z-index or overflow can cover or clip it.
  */
 export function CategorySearchInput({
   categories,
@@ -40,7 +41,8 @@ export function CategorySearchInput({
   placeholder,
   defaultValue,
   className,
-  wrapperClassName = "relative",
+  wrapperClassName,
+  anchor = "input",
 }: {
   categories: SuggestCategory[];
   id: string;
@@ -48,6 +50,8 @@ export function CategorySearchInput({
   defaultValue?: string;
   className?: string;
   wrapperClassName?: string;
+  /** What the popup lines up with: the input itself, or the surrounding form (e.g. a search bar). */
+  anchor?: "input" | "form";
 }) {
   const { locale, dict, href } = useI18n();
   const m = dict.marketplace;
@@ -95,6 +99,22 @@ export function CategorySearchInput({
     ...productMatches.map((p) => ({ kind: "product" as const, key: `p:${p.slug}`, product: p })),
   ];
   const showing = open && options.length > 0;
+
+  // Page coordinates of the anchor, so the portalled popup scrolls with the page.
+  const [box, setBox] = useState<{ top: number; left: number; width: number } | null>(null);
+  useLayoutEffect(() => {
+    if (!showing) return;
+    const place = () => {
+      const input = inputRef.current;
+      const el = anchor === "form" ? (input?.closest("form") ?? input) : input;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setBox({ top: r.bottom + window.scrollY, left: r.left + window.scrollX, width: r.width });
+    };
+    place();
+    window.addEventListener("resize", place);
+    return () => window.removeEventListener("resize", place);
+  }, [showing, anchor, options.length]);
 
   const pick = (o: Option) => {
     setOpen(false);
@@ -205,19 +225,24 @@ export function CategorySearchInput({
         placeholder={placeholder}
         className={className}
       />
-      {showing && (
-        <ul
-          id={listId}
-          role="listbox"
-          aria-label={m.searchLabel}
-          className="absolute inset-x-0 top-full z-50 mt-2 max-h-[min(28rem,70dvh)] overflow-y-auto rounded-2xl border border-white/10 bg-popover/95 p-1.5 text-left shadow-2xl shadow-black/40 backdrop-blur"
-        >
-          {categoryMatches.length > 0 && heading(m.gamesLabel)}
-          {options.filter((o) => o.kind === "category").map((o, i) => row(o, i))}
-          {(productMatches.length > 0 || loadingProducts) && heading(m.productsLabel, loadingProducts)}
-          {options.filter((o) => o.kind === "product").map((o, i) => row(o, categoryMatches.length + i))}
-        </ul>
-      )}
+      {showing &&
+        box &&
+        createPortal(
+          // z-40 keeps it over page content but under the fixed header (z-50).
+          <ul
+            id={listId}
+            role="listbox"
+            aria-label={m.searchLabel}
+            style={{ top: box.top, left: box.left, width: box.width }}
+            className="absolute z-40 mt-2 max-h-[min(28rem,70dvh)] overflow-y-auto rounded-2xl border border-white/10 bg-popover/95 p-1.5 text-left shadow-2xl shadow-black/40 backdrop-blur"
+          >
+            {categoryMatches.length > 0 && heading(m.gamesLabel)}
+            {options.filter((o) => o.kind === "category").map((o, i) => row(o, i))}
+            {(productMatches.length > 0 || loadingProducts) && heading(m.productsLabel, loadingProducts)}
+            {options.filter((o) => o.kind === "product").map((o, i) => row(o, categoryMatches.length + i))}
+          </ul>,
+          document.body,
+        )}
     </div>
   );
 }

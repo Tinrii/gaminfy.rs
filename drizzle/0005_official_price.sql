@@ -1,0 +1,1 @@
+ALTER TABLE `products` ADD `official_price_minor` int;

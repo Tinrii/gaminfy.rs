@@ -82,7 +82,7 @@ async function Marketplace({ searchParams }: Pick<PageProps<"/[lang]/marketplace
     <section className="container-page pb-28">
       <CategorySwitcher categories={categories} active={query.category} />
       {active && subcategories.length > 0 && (
-        <SubcategorySwitcher category={active.slug} subcategories={subcategories} active={query.sub} />
+        <SubcategorySwitcher category={active} subcategories={subcategories} active={query.sub} />
       )}
 
       <MarketplaceFilters

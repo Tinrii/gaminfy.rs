@@ -3,7 +3,17 @@
 import { useAuth } from "@clerk/nextjs";
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { Loader2Icon, LockIcon, MinusIcon, PlusIcon, ShoppingCartIcon, TagIcon, Trash2Icon, XIcon } from "lucide-react";
+import {
+  BadgePercentIcon,
+  Loader2Icon,
+  LockIcon,
+  MinusIcon,
+  PlusIcon,
+  ShoppingCartIcon,
+  TagIcon,
+  Trash2Icon,
+  XIcon,
+} from "lucide-react";
 import { getCartQuote, startCheckout, type CheckoutState } from "@/app/actions/checkout";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -323,6 +333,22 @@ export function CartSheet() {
                   </dd>
                 </div>
               </dl>
+
+              {quote && quote.savingsMinor > 0 && (
+                <p
+                  className={cn(
+                    "flex items-start gap-2.5 rounded-xl border border-emerald-400/25 bg-emerald-400/[0.07] px-3 py-2.5 text-sm transition-opacity",
+                    loading && "opacity-60",
+                  )}
+                >
+                  <BadgePercentIcon className="mt-0.5 size-4 shrink-0 text-emerald-400" />
+                  <span>
+                    {c.savings.split("{amount}")[0]}
+                    <Price minor={quote.savingsMinor} currency={quote.currency} className="font-semibold text-emerald-400" />
+                    {c.savings.split("{amount}")[1]}
+                  </span>
+                </p>
+              )}
 
               {checkout.error && !guestOpen && (
                 <Alert variant="destructive">

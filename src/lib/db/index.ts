@@ -17,11 +17,12 @@ export function db(): Db {
       // The DB is remote: routers/NAT silently drop idle TCP connections, and a query
       // sent on such a dead socket hangs until TCP gives up (seen as a stuck
       // "use cache" fill in dev). Keep-alive probes keep live sockets open and detect
-      // dead ones; idle extras are closed instead of being kept forever.
+      // dead ones.
+      // Don't set maxIdle below connectionLimit: mysql2 then starts a 1s idle-sweep
+      // timer that calls Date.now() inside whichever render first created the pool,
+      // which Next.js reports as "unstable value Date.now() while prerendering".
       enableKeepAlive: true,
       keepAliveInitialDelay: 10_000,
-      maxIdle: 2,
-      idleTimeout: 60_000,
       connectTimeout: 10_000,
       // Enable once MariaDB on the Ubuntu host has TLS configured (DATABASE_SSL=true).
       ssl: env().DATABASE_SSL === "true" ? { rejectUnauthorized: true } : undefined,

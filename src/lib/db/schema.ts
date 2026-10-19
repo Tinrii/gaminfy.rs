@@ -90,6 +90,8 @@ export const products = mysqlTable(
     imageUrl: varchar("image_url", { length: 512 }),
     /** Price in the smallest currency unit (e.g. cents / para). */
     priceMinor: int("price_minor").notNull(),
+    /** Optional price of the same item in the official in-game store (same currency), for the cart's savings line. */
+    officialPriceMinor: int("official_price_minor"),
     currency: varchar("currency", { length: 3 }).notNull().default("RSD"),
     deliveryType: mysqlEnum("delivery_type", ["automatic", "manual"]).notNull(),
     /** Which contact fields the customer must supply for manual fulfillment. */

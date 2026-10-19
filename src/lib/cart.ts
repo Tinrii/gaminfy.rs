@@ -22,6 +22,8 @@ export type CartLine = {
   imageUrl: string | null;
   deliveryType: "automatic" | "manual";
   unitPriceMinor: number;
+  /** Same item in the official in-game store, if the admin set it. */
+  officialPriceMinor: number | null;
   currency: string;
   quantity: number;
   /** Highest quantity that can be ordered right now (0 = sold out). */
@@ -37,6 +39,8 @@ export type CartQuote = {
   subtotalMinor: number;
   discountMinor: number;
   totalMinor: number;
+  /** How much less than the official store prices the cart costs (lines with an official price only, before coupons). */
+  savingsMinor: number;
   coupon: { id: number; code: string; type: "fixed" | "percent"; value: number } | null;
   couponError: CouponError | null;
   couponMinSubtotalMinor: number | null;
@@ -74,6 +78,7 @@ export async function quoteCart(rawItems: unknown, locale: Locale, couponCode?: 
           categoryName: categories.name,
           deliveryType: products.deliveryType,
           priceMinor: products.priceMinor,
+          officialPriceMinor: products.officialPriceMinor,
           currency: products.currency,
           manualStock: products.manualStock,
           codes: sql<number>`${AVAILABLE_CODES_SQL}`,
@@ -105,6 +110,7 @@ export async function quoteCart(rawItems: unknown, locale: Locale, couponCode?: 
       imageUrl: p.imageUrl,
       deliveryType: p.deliveryType,
       unitPriceMinor: p.priceMinor,
+      officialPriceMinor: p.officialPriceMinor,
       currency: p.currency,
       quantity,
       maxQuantity,
@@ -113,6 +119,13 @@ export async function quoteCart(rawItems: unknown, locale: Locale, couponCode?: 
   }
 
   const subtotalMinor = lines.reduce((sum, l) => sum + l.lineTotalMinor, 0);
+  const savingsMinor = lines.reduce(
+    (sum, l) =>
+      l.maxQuantity > 0 && l.officialPriceMinor && l.officialPriceMinor > l.unitPriceMinor
+        ? sum + (l.officialPriceMinor - l.unitPriceMinor) * l.quantity
+        : sum,
+    0,
+  );
   let coupon: CartQuote["coupon"] = null;
   let couponError: CouponError | null = null;
   let couponMinSubtotalMinor: number | null = null;
@@ -136,6 +149,7 @@ export async function quoteCart(rawItems: unknown, locale: Locale, couponCode?: 
     subtotalMinor,
     discountMinor,
     totalMinor: subtotalMinor - discountMinor,
+    savingsMinor,
     coupon,
     couponError,
     couponMinSubtotalMinor,

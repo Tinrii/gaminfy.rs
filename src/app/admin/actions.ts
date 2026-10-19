@@ -46,6 +46,11 @@ const productSchema = z.object({
   categoryId: z.coerce.number().int().positive("Pick a category."),
   subcategoryId: z.coerce.number().int().positive().nullable(),
   price: z.coerce.number().positive("Price must be greater than 0.").max(10_000_000),
+  officialPrice: z
+    .string()
+    .trim()
+    .transform((v) => (v === "" ? null : Number(v)))
+    .refine((v) => v === null || (Number.isFinite(v) && v > 0 && v <= 10_000_000), "Official price must be a positive number or empty."),
   currency: z.string().trim().length(3).toUpperCase().default("RSD"),
   deliveryType: z.enum(["automatic", "manual"]),
   description: optionalText(5000),
@@ -74,6 +79,7 @@ export async function saveProduct(_prev: AdminState, formData: FormData): Promis
     categoryId: formData.get("categoryId"),
     subcategoryId: formData.get("subcategoryId") || null,
     price: formData.get("price"),
+    officialPrice: formData.get("officialPrice") ?? "",
     currency: formData.get("currency") || "RSD",
     deliveryType: formData.get("deliveryType"),
     description: formData.get("description") ?? "",
@@ -88,7 +94,7 @@ export async function saveProduct(_prev: AdminState, formData: FormData): Promis
   });
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
 
-  const { id, price, contactFields, slug, ...data } = parsed.data;
+  const { id, price, officialPrice, contactFields, slug, ...data } = parsed.data;
   if (data.subcategoryId) {
     const [sub] = await db()
       .select({ categoryId: subcategories.categoryId })
@@ -100,6 +106,7 @@ export async function saveProduct(_prev: AdminState, formData: FormData): Promis
     ...data,
     slug: slugify(slug || data.nameEn || data.name),
     priceMinor: Math.round(price * 100),
+    officialPriceMinor: officialPrice === null ? null : Math.round(officialPrice * 100),
     requiredContactFields: data.deliveryType === "manual" && contactFields.length ? contactFields.join(",") : null,
     manualStock: data.deliveryType === "manual" ? data.manualStock : null,
   };
