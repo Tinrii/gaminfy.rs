@@ -150,6 +150,20 @@ export async function listSubcategoriesAdmin() {
     .orderBy(asc(subcategories.sortOrder), asc(subcategories.name));
 }
 
+/** Full rows with product counts, for the category editor. */
+export async function listSubcategoriesFull() {
+  const rows = await db()
+    .select({
+      subcategory: subcategories,
+      products: sql<number>`${sql.raw("(select count(*) from `products` p where p.`subcategory_id` = `subcategories`.`id`)")}`,
+    })
+    .from(subcategories)
+    .orderBy(asc(subcategories.sortOrder), asc(subcategories.name));
+  return rows.map((r) => ({ ...r.subcategory, products: Number(r.products) }));
+}
+
+export type AdminSubcategory = Awaited<ReturnType<typeof listSubcategoriesFull>>[number];
+
 export async function listMessages() {
   return db().select().from(contactMessages).orderBy(asc(contactMessages.isHandled), desc(contactMessages.createdAt)).limit(200);
 }

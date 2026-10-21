@@ -9,20 +9,24 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import type { AdminSubcategory } from "@/lib/admin-data";
 import type { Category } from "@/lib/db/schema";
 import { cn } from "@/lib/utils";
 import { deleteCategory, saveCategory, type AdminState } from "../actions";
 import { ImageUploadField } from "../image-upload-field";
 import { SubmitButton } from "../ui";
+import { SubcategoriesEditor } from "./subcategories-editor";
 
 type Row = Category & { products: number };
 
 export function CategoriesManager({
   categories,
+  subcategories,
   images,
   uploadsEnabled,
 }: {
   categories: Row[];
+  subcategories: AdminSubcategory[];
   images: string[];
   uploadsEnabled: boolean;
 }) {
@@ -94,6 +98,7 @@ export function CategoriesManager({
         key={editing === undefined ? "closed" : (editing?.id ?? "new")}
         open={editing !== undefined}
         category={editing ?? undefined}
+        subcategories={editing ? subcategories.filter((s) => s.categoryId === editing.id) : []}
         images={images}
         uploadsEnabled={uploadsEnabled}
         onClose={() => setEditing(undefined)}
@@ -105,12 +110,14 @@ export function CategoriesManager({
 function CategoryDialog({
   open,
   category,
+  subcategories,
   images,
   uploadsEnabled,
   onClose,
 }: {
   open: boolean;
   category?: Row;
+  subcategories: AdminSubcategory[];
   images: string[];
   uploadsEnabled: boolean;
   onClose: () => void;
@@ -181,6 +188,15 @@ function CategoryDialog({
             </Button>
           </div>
         </form>
+
+        {category && (
+          <SubcategoriesEditor
+            categoryId={category.id}
+            fallbackImage={category.thumbUrl ?? category.imageUrl}
+            subcategories={subcategories}
+            uploadsEnabled={uploadsEnabled}
+          />
+        )}
 
         {category && (
           <form

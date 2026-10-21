@@ -14,6 +14,7 @@ const ASPECT: Record<UploadKind, string> = {
   product: "aspect-square",
   categoryCover: "aspect-[4/5]",
   categoryThumb: "aspect-square",
+  subcategory: "aspect-square",
 };
 
 /** Longest edge sent to the server; it re-encodes to the final size anyway. */

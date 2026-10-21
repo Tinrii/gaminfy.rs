@@ -43,6 +43,13 @@
       "when": 1792441325113,
       "tag": "0005_official_price",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1792542179021,
+      "tag": "0006_subcategory_image",
+      "breakpoints": true
     }
   ]
 }

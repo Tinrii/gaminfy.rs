@@ -317,6 +317,61 @@ export async function deleteCategory(formData: FormData) {
   refresh();
 }
 
+const subcategorySchema = z.object({
+  id: z.coerce.number().int().positive().optional(),
+  categoryId: z.coerce.number().int().positive(),
+  name: text(120).min(2, "Serbian name is required."),
+  nameEn: optionalText(120),
+  slug: text(80),
+  imageUrl: imagePath,
+  sortOrder: z.coerce.number().int().default(0),
+  isActive: z.boolean(),
+});
+
+export async function saveSubcategory(_prev: AdminState, formData: FormData): Promise<AdminState> {
+  await requireAdmin();
+  const parsed = subcategorySchema.safeParse({
+    id: formData.get("id") || undefined,
+    categoryId: formData.get("categoryId"),
+    name: formData.get("name"),
+    nameEn: formData.get("nameEn") ?? "",
+    slug: formData.get("slug") ?? "",
+    imageUrl: formData.get("imageUrl") ?? "",
+    sortOrder: formData.get("sortOrder") || 0,
+    isActive: formData.get("isActive") === "on",
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Check the form." };
+
+  const { id, slug, ...data } = parsed.data;
+  const values = { ...data, slug: slugify(slug || data.nameEn || data.name) };
+  try {
+    // categoryId is part of the WHERE so a forged id can't move another game's subcategory.
+    if (id) await db().update(subcategories).set(values).where(and(eq(subcategories.id, id), eq(subcategories.categoryId, data.categoryId)));
+    else await db().insert(subcategories).values(values);
+  } catch (err) {
+    if (isDuplicate(err)) return { error: "This category already has a subcategory with that slug." };
+    throw err;
+  }
+  updateTag(CATALOG_TAG);
+  refresh();
+  return { ok: true, message: id ? "Subcategory saved." : "Subcategory added." };
+}
+
+export async function deleteSubcategory(formData: FormData) {
+  await requireAdmin();
+  const id = Number(formData.get("id"));
+  if (!Number.isInteger(id)) return;
+  const [{ n }] = await db()
+    .select({ n: sql<number>`count(*)` })
+    .from(products)
+    .where(eq(products.subcategoryId, id));
+  // Subcategories with products are only hidden, so those products keep their grouping.
+  if (Number(n) > 0) await db().update(subcategories).set({ isActive: false }).where(eq(subcategories.id, id));
+  else await db().delete(subcategories).where(eq(subcategories.id, id));
+  updateTag(CATALOG_TAG);
+  refresh();
+}
+
 export async function toggleMessageHandled(formData: FormData) {
   await requireAdmin();
   const id = Number(formData.get("id"));
@@ -418,7 +473,7 @@ export async function deleteCoupon(formData: FormData) {
   refresh();
 }
 
-export type UploadKind = "product" | "categoryCover" | "categoryThumb";
+export type UploadKind = "product" | "categoryCover" | "categoryThumb" | "subcategory";
 export type UploadResult = { url?: string; error?: string };
 
 const UPLOAD_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
@@ -432,7 +487,7 @@ export async function uploadImage(formData: FormData): Promise<UploadResult> {
   if (!(file instanceof File) || file.size === 0) return { error: "Choose an image to upload." };
   if (!UPLOAD_TYPES.has(file.type)) return { error: "Use a JPG, PNG, WEBP or AVIF image." };
   if (file.size > MAX_UPLOAD_BYTES) return { error: "Image is too large (max 4 MB)." };
-  if (!["product", "categoryCover", "categoryThumb"].includes(kind)) return { error: "Unknown image slot." };
+  if (!["product", "categoryCover", "categoryThumb", "subcategory"].includes(kind)) return { error: "Unknown image slot." };
 
   let output: Buffer;
   try {
@@ -443,7 +498,10 @@ export async function uploadImage(formData: FormData): Promise<UploadResult> {
         ? image.resize(864, 1080, { fit: "cover", position: "attention" })
         : kind === "categoryThumb"
           ? image.resize(256, 256, { fit: "cover", position: "attention" })
-          : image.resize(1200, 1200, { fit: "inside", withoutEnlargement: true });
+          : kind === "subcategory"
+            ? // Icons (V-Bucks, a pickaxe…) are shown whole, so pad instead of cropping and keep transparency.
+              image.trim().resize(256, 256, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
+            : image.resize(1200, 1200, { fit: "inside", withoutEnlargement: true });
     output = await sized.webp({ quality: 82 }).toBuffer();
   } catch {
     return { error: "That file couldn't be read as an image." };

@@ -1,0 +1,1 @@
+ALTER TABLE `subcategories` ADD `image_url` varchar(512);

@@ -6,6 +6,7 @@ import { Loader2Icon, ZapIcon } from "lucide-react";
 import { startCheckout, type CheckoutState } from "@/app/actions/checkout";
 import { AddToCartButton } from "@/components/shop/add-to-cart-button";
 import { GuestCheckoutDialog } from "@/components/shop/guest-checkout-dialog";
+import { OfficialPrice } from "@/components/shop/official-price";
 import { Price } from "@/components/shop/price";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -15,12 +16,14 @@ export function BuyBox({
   productId,
   productName,
   priceMinor,
+  officialPriceMinor,
   currency,
   inStock,
 }: {
   productId: number;
   productName: string;
   priceMinor: number;
+  officialPriceMinor: number | null;
   currency: string;
   inStock: boolean;
 }) {
@@ -43,6 +46,13 @@ export function BuyBox({
         <div>
           <p className="text-xs text-muted-foreground">{dict.product.price}</p>
           <Price minor={priceMinor} currency={currency} className="text-3xl font-bold tracking-tight text-primary" />
+          <OfficialPrice
+            priceMinor={priceMinor}
+            officialPriceMinor={officialPriceMinor}
+            currency={currency}
+            size="lg"
+            className="mt-2"
+          />
         </div>
         <div className="flex flex-wrap gap-2">
           <AddToCartButton productId={productId} productName={productName} disabled={!inStock} />

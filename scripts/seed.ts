@@ -25,6 +25,7 @@ type SeedCategory = {
   delivery: Delivery;
   instructions: T;
   requiredContactFields?: string;
+  /** Icons live at /games/{category}-sub-{slug}.webp. */
   subcategories?: { slug: string; name: T }[];
   items: SeedItem[];
 };
@@ -316,7 +317,14 @@ async function main() {
 
     const subIds = new Map<string, number>();
     for (const [si, sub] of (c.subcategories ?? []).entries()) {
-      const values = { categoryId: row.id, slug: sub.slug, name: sub.name.sr, nameEn: sub.name.en, sortOrder: si };
+      const values = {
+        categoryId: row.id,
+        slug: sub.slug,
+        name: sub.name.sr,
+        nameEn: sub.name.en,
+        imageUrl: `/games/${c.slug}-sub-${sub.slug}.webp`,
+        sortOrder: si,
+      };
       await db
         .insert(subcategories)
         .values(values)

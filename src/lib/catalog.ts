@@ -32,6 +32,7 @@ const productCard = (locale: Locale) => ({
   slug: products.slug,
   name: tr<string>(products.name, products.nameEn, locale),
   priceMinor: products.priceMinor,
+  officialPriceMinor: products.officialPriceMinor,
   currency: products.currency,
   deliveryType: products.deliveryType,
   imageUrl: sql<string | null>`coalesce(${products.imageUrl}, ${categories.imageUrl})`,
@@ -45,6 +46,8 @@ export type ProductCard = {
   slug: string;
   name: string;
   priceMinor: number;
+  /** Price in the official in-game store, if set — shown as a comparison. */
+  officialPriceMinor: number | null;
   currency: string;
   deliveryType: "automatic" | "manual";
   imageUrl: string | null;
@@ -92,7 +95,7 @@ export async function getCategories(locale: Locale): Promise<CategoryWithCount[]
   return rows.map((r) => ({ ...r, offers: Number(r.offers) }));
 }
 
-export type SubcategoryWithCount = { id: number; slug: string; name: string; offers: number };
+export type SubcategoryWithCount = { id: number; slug: string; name: string; imageUrl: string | null; offers: number };
 
 /** Active subcategories of one category (empty for categories without any). */
 export async function getSubcategories(categorySlug: string, locale: Locale): Promise<SubcategoryWithCount[]> {
@@ -105,6 +108,7 @@ export async function getSubcategories(categorySlug: string, locale: Locale): Pr
       id: subcategories.id,
       slug: subcategories.slug,
       name: tr<string>(subcategories.name, subcategories.nameEn, locale),
+      imageUrl: subcategories.imageUrl,
       offers: sql<number>`count(${products.id})`,
     })
     .from(subcategories)

@@ -63,6 +63,8 @@ export const subcategories = mysqlTable(
     /** Serbian (default) name; nameEn holds the English translation. */
     name: varchar("name", { length: 120 }).notNull(),
     nameEn: varchar("name_en", { length: 120 }),
+    /** Square icon for the marketplace tile (transparent PNG/WebP works best); falls back to the category thumbnail. */
+    imageUrl: varchar("image_url", { length: 512 }),
     sortOrder: int("sort_order").notNull().default(0),
     isActive: boolean("is_active").notNull().default(true),
     ...timestamps,

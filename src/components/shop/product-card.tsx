@@ -6,6 +6,7 @@ import { useI18n } from "@/i18n/client";
 import type { ProductCard as ProductCardData } from "@/lib/catalog";
 import { cn } from "@/lib/utils";
 import { AddToCartButton } from "./add-to-cart-button";
+import { OfficialPrice } from "./official-price";
 import { Price } from "./price";
 import { ProductImage } from "./product-image";
 
@@ -59,7 +60,15 @@ export function ProductCard({ product, priority }: { product: ProductCardData; p
           </Link>
         </h3>
         <div className="mt-auto flex items-end justify-between gap-2 pt-1">
-          <Price minor={product.priceMinor} currency={product.currency} className="block text-base font-semibold text-primary" />
+          <div className="min-w-0">
+            <Price minor={product.priceMinor} currency={product.currency} className="block text-base font-semibold text-primary" />
+            <OfficialPrice
+              priceMinor={product.priceMinor}
+              officialPriceMinor={product.officialPriceMinor}
+              currency={product.currency}
+              className="mt-0.5"
+            />
+          </div>
           <AddToCartButton
             productId={product.id}
             productName={product.name}

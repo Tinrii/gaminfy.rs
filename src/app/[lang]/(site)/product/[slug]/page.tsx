@@ -165,7 +165,7 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
               </span>
             </div>
 
-            <BuyBox productId={product.id} productName={product.name} priceMinor={product.priceMinor} currency={product.currency} inStock={product.inStock} />
+            <BuyBox productId={product.id} productName={product.name} priceMinor={product.priceMinor} officialPriceMinor={product.officialPriceMinor} currency={product.currency} inStock={product.inStock} />
 
             <p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
               <ShieldCheckIcon className="size-4 text-primary" />

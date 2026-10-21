@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { listCategoriesAdmin, listKnownImages } from "@/lib/admin-data";
+import { listCategoriesAdmin, listKnownImages, listSubcategoriesFull } from "@/lib/admin-data";
 import { requireAdmin } from "@/lib/auth";
 import { uploadsEnabled } from "@/lib/storage";
 import { CategoriesManager } from "./categories-manager";
@@ -26,10 +26,11 @@ export default function CategoriesPage() {
 
 async function Categories() {
   await requireAdmin();
-  const [rows, images] = await Promise.all([listCategoriesAdmin(), listKnownImages()]);
+  const [rows, subcategories, images] = await Promise.all([listCategoriesAdmin(), listSubcategoriesFull(), listKnownImages()]);
   return (
     <CategoriesManager
       categories={rows.map(({ category, products }) => ({ ...category, products: Number(products) }))}
+      subcategories={subcategories}
       images={images}
       uploadsEnabled={uploadsEnabled()}
     />
