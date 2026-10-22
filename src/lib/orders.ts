@@ -2,6 +2,7 @@ import "server-only";
 import { timingSafeEqual } from "node:crypto";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { Locale } from "@/i18n/config";
+import { productGroupName } from "@/lib/catalog";
 import { db, schema } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
 import { orderDeliveredEmail, orderPaidEmail, type EmailOrder } from "@/lib/email-templates";
@@ -189,7 +190,7 @@ async function loadItems(orderIds: number[], locale: Locale) {
             : products.instructions,
         requiredContactFields: products.requiredContactFields,
         imageUrl: sql<string | null>`coalesce(${products.imageUrl}, ${categories.thumbUrl}, ${categories.imageUrl})`,
-        categoryName: categories.name,
+        categoryName: productGroupName(locale),
       })
       .from(orderItems)
       .innerJoin(products, eq(orderItems.productId, products.id))

@@ -4,6 +4,7 @@ import { getI18n } from "@/i18n/server";
 import { pageMetadata } from "@/lib/seo";
 import Link from "next/link";
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { PackageSearchIcon, ShoppingCartIcon } from "lucide-react";
 import { Reveal } from "@/components/motion/reveal";
 import { CheckoutNotice } from "@/components/shop/checkout-notice";
@@ -11,7 +12,16 @@ import { ProductCard } from "@/components/shop/product-card";
 import { PageHero } from "@/components/site/page-hero";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { getCategories, getProducts, getSubcategories, PAGE_SIZE, type ProductQuery, type ProductSort } from "@/lib/catalog";
+import {
+  getCategories,
+  getProducts,
+  getSearchTargets,
+  getSubcategories,
+  PAGE_SIZE,
+  type ProductQuery,
+  type ProductSort,
+} from "@/lib/catalog";
+import { CS2_CATEGORY } from "@/lib/site";
 import { CategorySwitcher } from "./category-switcher";
 import { MarketplaceFilters } from "./filters";
 import { SubcategorySwitcher } from "./subcategory-switcher";
@@ -54,7 +64,18 @@ async function Marketplace({ searchParams }: Pick<PageProps<"/[lang]/marketplace
   const sp = await searchParams;
   const sort = one(sp.sort) as ProductSort | undefined;
   const category = one(sp.category) || undefined;
-  const subcategories = category ? await getSubcategories(category, locale) : [];
+  const [categories, searchTargets, subcategories] = await Promise.all([
+    getCategories(locale),
+    getSearchTargets(locale),
+    category ? getSubcategories(category, locale) : [],
+  ]);
+  // CS2 skins live on their own page.
+  if (category === CS2_CATEGORY) redirect(href("/cs2"));
+  // Old links to games that are now a subcategory (e.g. ?category=brawl-stars → Mobile Games).
+  if (category && !categories.some((c) => c.slug === category)) {
+    const moved = searchTargets.find((x) => x.sub === category);
+    if (moved) redirect(href(`/marketplace?category=${moved.slug}&sub=${moved.sub}`));
+  }
   const query: ProductQuery = {
     locale,
     category,
@@ -68,7 +89,7 @@ async function Marketplace({ searchParams }: Pick<PageProps<"/[lang]/marketplace
   };
   const limit = Math.min(Math.max(num(one(sp.show)) ?? PAGE_SIZE, PAGE_SIZE), 200);
 
-  const [categories, { items, total }] = await Promise.all([getCategories(locale), getProducts({ ...query, limit })]);
+  const { items, total } = await getProducts({ ...query, limit });
   const active = categories.find((c) => c.slug === query.category);
   const activeSub = subcategories.find((s) => s.slug === query.sub);
 
@@ -87,7 +108,7 @@ async function Marketplace({ searchParams }: Pick<PageProps<"/[lang]/marketplace
 
       <MarketplaceFilters
         key={`filters-${JSON.stringify(query)}`}
-        categories={categories.map((c) => ({ slug: c.slug, name: c.name, imageUrl: c.thumbUrl ?? c.imageUrl, offers: c.offers }))}
+        categories={searchTargets}
         category={query.category}
         sub={query.sub}
         q={query.q}

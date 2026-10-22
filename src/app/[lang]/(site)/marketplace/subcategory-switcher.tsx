@@ -80,19 +80,19 @@ export function SubcategorySwitcher({
                   : "border-white/10 bg-background/40 hover:border-primary/40 hover:bg-primary/[0.05]",
               )}
             >
-              <span className="relative size-11 shrink-0 sm:size-14">
+              <span className="relative size-9 shrink-0 sm:size-11">
                 {x.icon ? (
                   // Icons are cut-outs: shown whole, with a soft shadow, no frame.
                   <ProductImage
                     src={x.icon}
                     alt=""
                     fill
-                    sizes="56px"
-                    className="object-contain drop-shadow-[0_6px_10px_rgba(0,0,0,0.45)] transition-transform duration-300 group-hover:scale-110"
+                    sizes="44px"
+                    className="object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.45)] transition-transform duration-300 group-hover:scale-110"
                   />
                 ) : (
-                  <span className="absolute inset-1 overflow-hidden rounded-xl ring-1 ring-white/10">
-                    <ProductImage src={categoryThumb} alt="" fill sizes="56px" className="object-cover" />
+                  <span className="absolute inset-0.5 overflow-hidden rounded-lg ring-1 ring-white/10">
+                    <ProductImage src={categoryThumb} alt="" fill sizes="44px" className="object-cover" />
                   </span>
                 )}
               </span>

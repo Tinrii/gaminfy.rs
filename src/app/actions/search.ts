@@ -18,12 +18,12 @@ export async function suggestProducts(input: { q: string; locale: string }): Pro
   if (q.length < 2) return [];
   const locale: Locale = isLocale(input.locale) ? input.locale : "sr";
   const { items } = await getProducts({ locale, q, sort: "featured", limit: 5 });
-  return items.map(({ slug, name, imageUrl, priceMinor, currency, categoryName }) => ({
+  return items.map(({ slug, name, imageUrl, priceMinor, currency, categoryName, subcategoryName }) => ({
     slug,
     name,
     imageUrl,
     priceMinor,
     currency,
-    categoryName,
+    categoryName: subcategoryName ?? categoryName,
   }));
 }

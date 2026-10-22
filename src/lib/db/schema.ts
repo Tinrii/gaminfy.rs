@@ -39,7 +39,8 @@ export const categories = mysqlTable("categories", {
   id: id(),
   slug: varchar("slug", { length: 80 }).notNull().unique(),
   name: varchar("name", { length: 120 }).notNull(),
-  /** Serbian (default) copy; *En columns hold the English translation. */
+  /** Serbian (default) copy; *En columns hold the English translation (falls back to Serbian). */
+  nameEn: varchar("name_en", { length: 120 }),
   description: varchar("description", { length: 255 }),
   descriptionEn: varchar("description_en", { length: 255 }),
   /** Portrait cover art (4:5), shown on category cards. */

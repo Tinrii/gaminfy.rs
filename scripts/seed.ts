@@ -21,12 +21,20 @@ type SeedItem = { name: T; rsd: number; image?: string; description?: T; sub?: s
 type SeedCategory = {
   slug: string;
   name: string;
+  nameEn?: string;
   description: T;
-  delivery: Delivery;
-  instructions: T;
+  /** Required when the category has items. */
+  delivery?: Delivery;
+  instructions?: T;
   requiredContactFields?: string;
-  /** Icons live at /games/{category}-sub-{slug}.webp. */
-  subcategories?: { slug: string; name: T }[];
+  /** Icons live at /games/{category}-sub-{slug}.webp, unless `icon: false`. */
+  subcategories?: { slug: string; name: T; icon?: false }[];
+  /**
+   * Listed as subcategory `sub` of a group category seeded earlier (e.g. Brawl Stars in
+   * Mobile Games): its products go there, keep this slug prefix and cover, and this
+   * category itself stays hidden.
+   */
+  listedIn?: { category: string; sub: string };
   items: SeedItem[];
 };
 
@@ -97,20 +105,18 @@ const CATALOG: SeedCategory[] = [
     ],
   },
   {
-    slug: "brawl-stars",
-    name: "Brawl Stars",
-    description: { sr: "Gemovi, Brawl Pass i Brawl Pass+.", en: "Gems, Brawl Pass and Brawl Pass+." },
-    delivery: "manual",
-    instructions: SUPERCELL,
-    requiredContactFields: "email",
-    items: [
-      { name: { sr: "80 gemova", en: "80 Gems" }, rsd: 800 },
-      { name: { sr: "170 gemova", en: "170 Gems" }, rsd: 1400 },
-      { name: { sr: "360 gemova", en: "360 Gems" }, rsd: 2500 },
-      { name: { sr: "950 gemova", en: "950 Gems" }, rsd: 5800 },
-      { name: same("Brawl Pass"), rsd: 1100 },
-      { name: same("Brawl Pass+"), rsd: 1500 },
+    slug: "mobile-games",
+    name: "Mobile Games",
+    description: {
+      sr: "Gemovi, passovi i UC za Brawl Stars, Clash of Clans i PUBG.",
+      en: "Gems, passes and UC for Brawl Stars, Clash of Clans and PUBG.",
+    },
+    subcategories: [
+      { slug: "brawl-stars", name: same("Brawl Stars") },
+      { slug: "clash-of-clans", name: same("Clash of Clans") },
+      { slug: "pubg", name: same("PUBG") },
     ],
+    items: [],
   },
   {
     slug: "roblox",
@@ -153,19 +159,26 @@ const CATALOG: SeedCategory[] = [
     })),
   },
   {
-    slug: "pubg",
-    name: "PUBG",
-    description: { sr: "Unknown Cash (UC) dopune preko tvog PUBG ID-ja.", en: "Unknown Cash (UC) top-ups with your PUBG ID." },
+    slug: "rocket-league",
+    name: "Rocket League",
+    description: { sr: "Rocket League Credits — isporuka u roku od 15 minuta.", en: "Rocket League Credits — delivered within 15 minutes." },
     delivery: "manual",
     instructions: {
-      sr: "Potreban nam je samo tvoj PUBG ID — unesi ga u formu nakon plaćanja.",
-      en: "All we need is your PUBG player ID — add it to the order form after payment.",
+      sr: "Nakon plaćanja javi nam kako da te kontaktiramo. Naš tim će te kontaktirati da dopuni Credits na tvoj Rocket League nalog. Isporuka u roku od 15 minuta.",
+      en: "After payment, tell us the best way to reach you. Our team will contact you to load the Credits onto your Rocket League account. Delivery within 15 minutes.",
     },
     requiredContactFields: "discord,email,instagram",
-    items: [330, 660, 1800, 3850, 8100].map((v, i) => ({
-      name: amount(v, "UC"),
-      rsd: [700, 1500, 3000, 6000, 11500][i],
-    })),
+    items: [500, 1100, 3000, 6500].map((v, i) => {
+      const name = amount(v, "Credits");
+      return {
+        name,
+        rsd: [500, 1000, 2100, 4000][i],
+        description: {
+          sr: `${name.sr} za Rocket League — isporuka u roku od 15 minuta, doživotna garancija.`,
+          en: `${name.en} for Rocket League — delivered within 15 minutes, lifetime warranty.`,
+        },
+      };
+    }),
   },
   {
     slug: "minecraft",
@@ -183,16 +196,20 @@ const CATALOG: SeedCategory[] = [
     ],
   },
   {
-    slug: "spotify",
-    name: "Spotify",
-    description: { sr: "Spotify Premium na 12 meseci.", en: "Spotify Premium for 12 months." },
-    delivery: "manual",
-    instructions: {
-      sr: "Aktivira se na tvom Spotify nalogu. Nakon plaćanja ostavi kontakt i provešćemo te kroz proces — isporuka u roku od 1h.",
-      en: "Activated on your own Spotify account. After payment, leave your contact details and we'll guide you through it — delivery within 1 hour.",
+    slug: "digital-subscriptions",
+    name: "Digitalne pretplate",
+    nameEn: "Digital Subscriptions",
+    description: {
+      sr: "Spotify, YouTube Premium, Canva Pro i Adobe Creative Cloud.",
+      en: "Spotify, YouTube Premium, Canva Pro and Adobe Creative Cloud.",
     },
-    requiredContactFields: "discord,email,instagram",
-    items: [{ name: { sr: "Spotify Premium — 12 meseci", en: "Spotify Premium — 12 Months" }, rsd: 3000 }],
+    subcategories: [
+      { slug: "spotify", name: same("Spotify") },
+      { slug: "youtube-premium", name: same("YouTube Premium") },
+      { slug: "canva-pro", name: same("Canva Pro") },
+      { slug: "adobe-creative-cloud", name: same("Adobe Creative Cloud") },
+    ],
+    items: [],
   },
   {
     slug: "steam",
@@ -203,7 +220,15 @@ const CATALOG: SeedCategory[] = [
       sr: "Steam Wallet kod stiže na mejl odmah nakon plaćanja. Kodovi se mogu aktivirati samo na nalozima iz EU regiona. Doživotna garancija.",
       en: "You receive a Steam Wallet code by email right after payment. Codes can only be redeemed on EU-region accounts. Lifetime warranty.",
     },
-    items: [10, 20, 50, 100].map((v, i) => ({ name: same(`Steam Wallet €${v}`), rsd: [1600, 3000, 6700, 13500][i] })),
+    subcategories: [
+      { slug: "wallet", name: same("Steam Wallet") },
+      { slug: "games", name: { sr: "Steam igre", en: "Steam Games" } },
+    ],
+    items: [10, 20, 50, 100].map((v, i) => ({
+      name: same(`Steam Wallet €${v}`),
+      rsd: [1600, 3000, 6700, 13500][i],
+      sub: "wallet",
+    })),
   },
   {
     slug: "playstation",
@@ -214,14 +239,21 @@ const CATALOG: SeedCategory[] = [
       sr: "PlayStation Store kod stiže na mejl odmah nakon plaćanja i sam ga aktiviraš. Proveri da region kartice odgovara tvom PSN nalogu.",
       en: "You receive a PlayStation Store code by email right after payment and redeem it yourself. Make sure the card region matches your PSN account.",
     },
+    subcategories: [
+      { slug: "gift-cards", name: { sr: "PlayStation poklon kartice", en: "PlayStation Gift Cards" } },
+      { slug: "games", name: { sr: "PlayStation igre", en: "PlayStation Games" } },
+      { slug: "plus", name: same("PlayStation Plus") },
+    ],
     items: [
       ...[10, 20, 50, 100, 200].map((v, i) => ({
         name: { sr: `PSN poklon kartica £${v} (UK)`, en: `PSN Gift Card £${v} (UK)` },
         rsd: [1550, 3100, 7500, 14500, 28000][i],
+        sub: "gift-cards",
       })),
       ...[10, 25, 50, 100, 200].map((v, i) => ({
         name: { sr: `PSN poklon kartica $${v} (US)`, en: `PSN Gift Card $${v} (US)` },
         rsd: [1300, 3000, 5800, 11300, 22000][i],
+        sub: "gift-cards",
       })),
     ],
   },
@@ -256,8 +288,55 @@ const CATALOG: SeedCategory[] = [
     ],
   },
   {
+    slug: "brawl-stars",
+    name: "Brawl Stars",
+    listedIn: { category: "mobile-games", sub: "brawl-stars" },
+    description: { sr: "Gemovi, Brawl Pass i Brawl Pass+.", en: "Gems, Brawl Pass and Brawl Pass+." },
+    delivery: "manual",
+    instructions: SUPERCELL,
+    requiredContactFields: "email",
+    items: [
+      { name: { sr: "80 gemova", en: "80 Gems" }, rsd: 800 },
+      { name: { sr: "170 gemova", en: "170 Gems" }, rsd: 1400 },
+      { name: { sr: "360 gemova", en: "360 Gems" }, rsd: 2500 },
+      { name: { sr: "950 gemova", en: "950 Gems" }, rsd: 5800 },
+      { name: same("Brawl Pass"), rsd: 1100 },
+      { name: same("Brawl Pass+"), rsd: 1500 },
+    ],
+  },
+  {
+    slug: "pubg",
+    name: "PUBG",
+    listedIn: { category: "mobile-games", sub: "pubg" },
+    description: { sr: "Unknown Cash (UC) dopune preko tvog PUBG ID-ja.", en: "Unknown Cash (UC) top-ups with your PUBG ID." },
+    delivery: "manual",
+    instructions: {
+      sr: "Potreban nam je samo tvoj PUBG ID — unesi ga u formu nakon plaćanja.",
+      en: "All we need is your PUBG player ID — add it to the order form after payment.",
+    },
+    requiredContactFields: "discord,email,instagram",
+    items: [330, 660, 1800, 3850, 8100].map((v, i) => ({
+      name: amount(v, "UC"),
+      rsd: [700, 1500, 3000, 6000, 11500][i],
+    })),
+  },
+  {
+    slug: "spotify",
+    name: "Spotify",
+    listedIn: { category: "digital-subscriptions", sub: "spotify" },
+    description: { sr: "Spotify Premium na 12 meseci.", en: "Spotify Premium for 12 months." },
+    delivery: "manual",
+    instructions: {
+      sr: "Aktivira se na tvom Spotify nalogu. Nakon plaćanja ostavi kontakt i provešćemo te kroz proces — isporuka u roku od 1h.",
+      en: "Activated on your own Spotify account. After payment, leave your contact details and we'll guide you through it — delivery within 1 hour.",
+    },
+    requiredContactFields: "discord,email,instagram",
+    items: [{ name: { sr: "Spotify Premium — 12 meseci", en: "Spotify Premium — 12 Months" }, rsd: 3000 }],
+  },
+  {
     slug: "adobe-creative-cloud",
     name: "Adobe Creative Cloud",
+    listedIn: { category: "digital-subscriptions", sub: "adobe-creative-cloud" },
     description: { sr: "Sve Adobe aplikacije na 12 meseci.", en: "All Adobe apps for 12 months." },
     delivery: "manual",
     instructions: {
@@ -270,6 +349,7 @@ const CATALOG: SeedCategory[] = [
   {
     slug: "canva-pro",
     name: "Canva Pro",
+    listedIn: { category: "digital-subscriptions", sub: "canva-pro" },
     description: { sr: "Canva Pro sa premium sadržajem i AI alatima.", en: "Canva Pro with premium content and AI tools." },
     delivery: "manual",
     instructions: {
@@ -278,6 +358,22 @@ const CATALOG: SeedCategory[] = [
     },
     requiredContactFields: "discord,email,instagram",
     items: [{ name: { sr: "Canva Pro — 12 meseci", en: "Canva Pro — 12 Months" }, rsd: 3600 }],
+  },
+  {
+    // Has its own golden page (/cs2); skins are added in Admin as weekly offers.
+    slug: "cs2",
+    name: "CS2 skinovi",
+    nameEn: "CS2 Skins",
+    description: { sr: "Nedeljne ponude CS2 skinova i otkup skinova.", en: "Weekly CS2 skin deals and skin buyback." },
+    subcategories: [
+      { slug: "knives", name: { sr: "Noževi", en: "Knives" }, icon: false },
+      { slug: "gloves", name: { sr: "Rukavice", en: "Gloves" }, icon: false },
+      { slug: "ak-47", name: same("AK-47"), icon: false },
+      { slug: "awp", name: same("AWP"), icon: false },
+      { slug: "m4a1-s", name: same("M4A1-S"), icon: false },
+      { slug: "pistols", name: { sr: "Pištolji", en: "Pistols" }, icon: false },
+    ],
+    items: [],
   },
 ];
 
@@ -299,15 +395,20 @@ async function main() {
   const pool = mysql.createPool({ uri: process.env.DATABASE_URL!, connectionLimit: 2 });
   const db = drizzle({ client: pool });
 
+  // Ids of seeded categories and their subcategories, for categories listed inside a group.
+  const seeded = new Map<string, { id: number; subIds: Map<string, number> }>();
+
   for (const [ci, c] of CATALOG.entries()) {
     const cat = {
       slug: c.slug,
       name: c.name,
+      nameEn: c.nameEn ?? null,
       description: c.description.sr,
       descriptionEn: c.description.en,
       imageUrl: `/games/${c.slug}.webp`,
       thumbUrl: `/games/${c.slug}-thumb.webp`,
       sortOrder: ci,
+      isActive: !c.listedIn,
     };
     await db
       .insert(categories)
@@ -322,7 +423,7 @@ async function main() {
         slug: sub.slug,
         name: sub.name.sr,
         nameEn: sub.name.en,
-        imageUrl: `/games/${c.slug}-sub-${sub.slug}.webp`,
+        imageUrl: sub.icon === false ? null : `/games/${c.slug}-sub-${sub.slug}.webp`,
         sortOrder: si,
       };
       await db
@@ -335,26 +436,42 @@ async function main() {
         .where(and(eq(subcategories.categoryId, row.id), eq(subcategories.slug, sub.slug)));
       subIds.set(sub.slug, s.id);
     }
+    seeded.set(c.slug, { id: row.id, subIds });
+
+    let home = { categoryId: row.id, subcategoryId: (sub?: string) => (sub ? (subIds.get(sub) ?? null) : null) };
+    if (c.listedIn) {
+      const group = seeded.get(c.listedIn.category);
+      const subId = group?.subIds.get(c.listedIn.sub);
+      if (!group || !subId) throw new Error(`${c.slug}: seed ${c.listedIn.category} (with ${c.listedIn.sub}) before it.`);
+      home = { categoryId: group.id, subcategoryId: () => subId };
+    }
+    const { delivery, instructions } = c;
+    if (!delivery || !instructions) {
+      if (c.items.length) throw new Error(`${c.slug}: items need delivery and instructions.`);
+      console.log(`✓ ${c.name} (group)`);
+      continue;
+    }
 
     for (const [pi, item] of c.items.entries()) {
       // Slugs come from the English name so URLs stay stable.
       const slug = `${c.slug}-${slugify(item.name.en)}`;
-      const description = item.description ?? defaultDescription(item.name, c.delivery);
+      const description = item.description ?? defaultDescription(item.name, delivery);
       const product = {
-        categoryId: row.id,
-        subcategoryId: item.sub ? (subIds.get(item.sub) ?? null) : null,
+        categoryId: home.categoryId,
+        subcategoryId: home.subcategoryId(item.sub),
         slug,
         name: item.name.sr,
         nameEn: item.name.en,
         description: description.sr,
         descriptionEn: description.en,
-        instructions: c.instructions.sr,
-        instructionsEn: c.instructions.en,
-        imageUrl: item.image ?? null,
+        instructions: instructions.sr,
+        instructionsEn: instructions.en,
+        // Products of a game listed inside a group keep that game's cover.
+        imageUrl: item.image ?? (c.listedIn ? `/games/${c.slug}.webp` : null),
         priceMinor: item.rsd * 100,
         currency: "RSD",
-        deliveryType: c.delivery,
-        requiredContactFields: c.delivery === "manual" ? (c.requiredContactFields ?? null) : null,
+        deliveryType: delivery,
+        requiredContactFields: delivery === "manual" ? (c.requiredContactFields ?? null) : null,
         sortOrder: pi,
       };
       await db

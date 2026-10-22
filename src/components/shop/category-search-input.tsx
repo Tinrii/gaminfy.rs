@@ -11,7 +11,8 @@ import { cn } from "@/lib/utils";
 import { Price } from "./price";
 import { ProductImage } from "./product-image";
 
-export type SuggestCategory = { slug: string; name: string; imageUrl: string | null; offers?: number };
+/** A game, or one of its subcategories (`sub`, e.g. "Brawl Stars" in Mobile Games, with `parent` = "Mobile Games"). */
+export type SuggestCategory = { slug: string; sub?: string; name: string; parent?: string; imageUrl: string | null; offers?: number };
 
 /** Case- and accent-insensitive, so "pokemon" finds "Pokémon". */
 const fold = (s: string) =>
@@ -71,7 +72,7 @@ export function CategorySearchInput({
   // Games are matched instantly on the client.
   const categoryMatches = q
     ? categories
-        .map((c) => ({ c, name: fold(c.name), slug: fold(c.slug) }))
+        .map((c) => ({ c, name: fold(c.name), slug: fold(c.sub ?? c.slug) }))
         .filter((x) => x.name.includes(q) || x.slug.includes(q))
         .sort((a, b) => rank(a.name, q) - rank(b.name, q))
         .slice(0, MAX_CATEGORIES)
@@ -95,7 +96,7 @@ export function CategorySearchInput({
   const loadingProducts = raw.length >= 2 && products.q !== raw;
 
   const options: Option[] = [
-    ...categoryMatches.map((c) => ({ kind: "category" as const, key: `c:${c.slug}`, category: c })),
+    ...categoryMatches.map((c) => ({ kind: "category" as const, key: `c:${c.slug}:${c.sub ?? ""}`, category: c })),
     ...productMatches.map((p) => ({ kind: "product" as const, key: `p:${p.slug}`, product: p })),
   ];
   const showing = open && options.length > 0;
@@ -120,7 +121,7 @@ export function CategorySearchInput({
     setOpen(false);
     inputRef.current?.blur();
     router.push(
-      href(o.kind === "category" ? `/marketplace?category=${encodeURIComponent(o.category.slug)}` : `/product/${o.product.slug}`),
+      href(o.kind === "category" ? categoryUrl(o.category) : `/product/${o.product.slug}`),
     );
   };
 
@@ -150,6 +151,8 @@ export function CategorySearchInput({
   const row = (o: Option, i: number) => {
     const on = i === active;
     const image = o.kind === "category" ? o.category.imageUrl : o.product.imageUrl;
+    // Subcategory icons are cut-outs: shown whole rather than cropped to the circle.
+    const icon = o.kind === "category" && o.category.sub;
     return (
       <li
         key={o.key}
@@ -170,13 +173,15 @@ export function CategorySearchInput({
             o.kind === "category" ? "rounded-full" : "rounded-lg",
           )}
         >
-          <ProductImage src={image} alt="" fill sizes="36px" className="object-cover object-top" />
+          <ProductImage src={image} alt="" fill sizes="36px" className={icon ? "object-contain p-1" : "object-cover object-top"} />
         </span>
         <span className="min-w-0 flex-1">
           <span className="block truncate font-medium">{o.kind === "category" ? o.category.name : o.product.name}</span>
           <span className="block truncate text-xs text-muted-foreground">
             {o.kind === "category"
-              ? o.category.offers !== undefined && plural(locale, o.category.offers, dict.category.offers)
+              ? [o.category.parent, o.category.offers !== undefined && plural(locale, o.category.offers, dict.category.offers)]
+                  .filter(Boolean)
+                  .join(" · ")
               : o.product.categoryName}
           </span>
         </span>
@@ -245,6 +250,11 @@ export function CategorySearchInput({
         )}
     </div>
   );
+}
+
+function categoryUrl(c: SuggestCategory) {
+  const url = `/marketplace?category=${encodeURIComponent(c.slug)}`;
+  return c.sub ? `${url}&sub=${encodeURIComponent(c.sub)}` : url;
 }
 
 function rank(name: string, q: string) {

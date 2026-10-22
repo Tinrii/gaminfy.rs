@@ -265,6 +265,7 @@ export async function assignCodeToOrder(_prev: AdminState, formData: FormData): 
 const categorySchema = z.object({
   id: z.coerce.number().int().positive().optional(),
   name: text(120).min(2, "Name is required."),
+  nameEn: optionalText(120),
   slug: text(80),
   description: optionalText(255),
   descriptionEn: optionalText(255),
@@ -279,6 +280,7 @@ export async function saveCategory(_prev: AdminState, formData: FormData): Promi
   const parsed = categorySchema.safeParse({
     id: formData.get("id") || undefined,
     name: formData.get("name"),
+    nameEn: formData.get("nameEn") ?? "",
     slug: formData.get("slug") ?? "",
     description: formData.get("description") ?? "",
     descriptionEn: formData.get("descriptionEn") ?? "",

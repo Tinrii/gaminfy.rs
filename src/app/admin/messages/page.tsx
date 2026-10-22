@@ -45,9 +45,12 @@ async function Messages() {
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="font-semibold">{m.name}</p>
-              <a href={`mailto:${m.email}`} className="text-sm text-primary hover:underline">
-                {m.email}
-              </a>
+              {/* CS2 requests can come with only an Instagram/WhatsApp contact (in the message). */}
+              {m.email && (
+                <a href={`mailto:${m.email}`} className="text-sm text-primary hover:underline">
+                  {m.email}
+                </a>
+              )}
             </div>
             <div className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground">{formatDateTime(m.createdAt)}</span>

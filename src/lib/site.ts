@@ -22,3 +22,9 @@ export const LEGAL = {
 
 /** WhatsApp contact (international format, digits only) for the floating chat button. */
 export const WHATSAPP_NUMBER = "381640069325";
+
+/** Category whose offers live on the golden /cs2 page instead of the marketplace. */
+export const CS2_CATEGORY = "cs2";
+
+/** Skin wear options in the CS2 request form (labels in dict.cs2.form.wears). */
+export const CS2_WEARS = ["any", "fn", "mw", "ft", "ww", "bs"] as const;

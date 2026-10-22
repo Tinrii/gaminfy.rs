@@ -27,6 +27,24 @@ const inStockExpr = sql<boolean>`(
 const tr = <T>(sr: AnyColumn, en: AnyColumn, locale: Locale) =>
   locale === "en" ? sql<T>`coalesce(${en}, ${sr})` : sql<T>`${sr}`;
 
+/** The product's subcategory (correlated subqueries, so any products query can select them). */
+const subcategorySlug = sql<string | null>`${sql.raw(
+  "(select s.`slug` from `subcategories` s where s.`id` = `products`.`subcategory_id` and s.`is_active` = true)",
+)}`;
+const subcategoryName = (locale: Locale) => {
+  const name = locale === "en" ? "coalesce(s.`name_en`, s.`name`)" : "s.`name`";
+  return sql<string | null>`${sql.raw(
+    `(select ${name} from \`subcategories\` s where s.\`id\` = \`products\`.\`subcategory_id\` and s.\`is_active\` = true)`,
+  )}`;
+};
+
+/** Category name in the visitor's language. */
+export const categoryName = (locale: Locale) => tr<string>(categories.name, categories.nameEn, locale);
+
+/** What a product is listed under: its subcategory (e.g. "Brawl Stars" in Mobile Games), else its category. */
+export const productGroupName = (locale: Locale) =>
+  sql<string>`coalesce(${subcategoryName(locale)}, ${categoryName(locale)})`;
+
 const productCard = (locale: Locale) => ({
   id: products.id,
   slug: products.slug,
@@ -37,7 +55,9 @@ const productCard = (locale: Locale) => ({
   deliveryType: products.deliveryType,
   imageUrl: sql<string | null>`coalesce(${products.imageUrl}, ${categories.imageUrl})`,
   categorySlug: categories.slug,
-  categoryName: categories.name,
+  categoryName: categoryName(locale),
+  subcategorySlug,
+  subcategoryName: subcategoryName(locale),
   inStock: inStockExpr,
 });
 
@@ -53,6 +73,8 @@ export type ProductCard = {
   imageUrl: string | null;
   categorySlug: string;
   categoryName: string;
+  subcategorySlug: string | null;
+  subcategoryName: string | null;
   inStock: boolean;
 };
 
@@ -80,7 +102,7 @@ export async function getCategories(locale: Locale): Promise<CategoryWithCount[]
     .select({
       id: categories.id,
       slug: categories.slug,
-      name: categories.name,
+      name: categoryName(locale),
       description: tr<string | null>(categories.description, categories.descriptionEn, locale),
       imageUrl: categories.imageUrl,
       thumbUrl: categories.thumbUrl,
@@ -121,6 +143,63 @@ export async function getSubcategories(categorySlug: string, locale: Locale): Pr
   return rows.map((r) => ({ ...r, offers: Number(r.offers) }));
 }
 
+/**
+ * What the search box suggests before products: active games, then subcategories
+ * (e.g. "Brawl Stars" inside Mobile Games), which open with their `sub` selected.
+ */
+export type SearchTarget = {
+  slug: string;
+  sub?: string;
+  name: string;
+  /** Category name, for subcategories. */
+  parent?: string;
+  imageUrl: string | null;
+  offers: number;
+};
+
+export async function getSearchTargets(locale: Locale): Promise<SearchTarget[]> {
+  "use cache";
+  cacheTag(CATALOG_TAG);
+  cacheLife("hours");
+
+  const [cats, subs] = await Promise.all([
+    getCategories(locale),
+    db()
+      .select({
+        categorySlug: categories.slug,
+        slug: subcategories.slug,
+        name: tr<string>(subcategories.name, subcategories.nameEn, locale),
+        imageUrl: subcategories.imageUrl,
+        offers: sql<number>`count(${products.id})`,
+      })
+      .from(subcategories)
+      .innerJoin(categories, eq(subcategories.categoryId, categories.id))
+      .leftJoin(products, and(eq(products.subcategoryId, subcategories.id), eq(products.isActive, true)))
+      .where(and(eq(categories.isActive, true), eq(subcategories.isActive, true)))
+      .groupBy(subcategories.id, categories.slug, categories.sortOrder)
+      .orderBy(asc(categories.sortOrder), asc(subcategories.sortOrder)),
+  ]);
+
+  const parents = new Map(cats.map((c) => [c.slug, c]));
+  return [
+    ...cats.map((c) => ({ slug: c.slug, name: c.name, imageUrl: c.thumbUrl ?? c.imageUrl, offers: c.offers })),
+    ...subs.flatMap((s) => {
+      const parent = parents.get(s.categorySlug);
+      if (!parent) return [];
+      return [
+        {
+          slug: parent.slug,
+          sub: s.slug,
+          name: s.name,
+          parent: parent.name,
+          imageUrl: s.imageUrl ?? parent.thumbUrl ?? parent.imageUrl,
+          offers: Number(s.offers),
+        },
+      ];
+    }),
+  ];
+}
+
 export type ProductSort = "featured" | "price-asc" | "price-desc" | "name";
 
 export type ProductQuery = {
@@ -150,7 +229,16 @@ export async function getProducts(query: ProductQuery): Promise<{ items: Product
   }
   if (query.q) {
     const term = `%${query.q.replace(/[%_\\]/g, "\\$&")}%`;
-    filters.push(or(like(products.name, term), like(products.nameEn, term), like(categories.name, term))!);
+    filters.push(
+      or(
+        like(products.name, term),
+        like(products.nameEn, term),
+        like(categories.name, term),
+        like(categories.nameEn, term),
+        // So "brawl" still finds Brawl Stars products listed under Mobile Games.
+        sql`exists (select 1 from \`subcategories\` s where s.\`id\` = ${products.subcategoryId} and (s.\`name\` like ${term} or s.\`name_en\` like ${term}))`,
+      )!,
+    );
   }
   if (query.min !== undefined) filters.push(gte(products.priceMinor, query.min * 100));
   if (query.max !== undefined) filters.push(lte(products.priceMinor, query.max * 100));
@@ -283,7 +371,7 @@ export async function getSitemapData() {
     db()
       .select({
         slug: categories.slug,
-        name: categories.name,
+        name: categoryName("en"),
         description: sql<string | null>`coalesce(${categories.descriptionEn}, ${categories.description})`,
         updatedAt: categories.updatedAt,
       })

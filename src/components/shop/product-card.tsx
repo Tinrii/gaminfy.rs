@@ -10,7 +10,19 @@ import { OfficialPrice } from "./official-price";
 import { Price } from "./price";
 import { ProductImage } from "./product-image";
 
-export function ProductCard({ product, priority }: { product: ProductCardData; priority?: boolean }) {
+export function ProductCard({
+  product,
+  priority,
+  skin,
+  officialPriceLabel,
+}: {
+  product: ProductCardData;
+  priority?: boolean;
+  /** CS2 skins: wide weapon renders, shown whole on a glow instead of cropped to a square. */
+  skin?: boolean;
+  /** Overrides what the struck-through price is called (e.g. "Steam Market price"). */
+  officialPriceLabel?: string;
+}) {
   const { dict, href } = useI18n();
   // The whole card is clickable through the title link's stretched ::after, which
   // keeps the add-to-cart button outside the link (no nested interactive elements).
@@ -23,7 +35,14 @@ export function ProductCard({ product, priority }: { product: ProductCardData; p
         !product.inStock && "opacity-70",
       )}
     >
-      <div className="relative aspect-square overflow-hidden rounded-xl bg-secondary">
+      <div
+        className={cn(
+          "relative overflow-hidden rounded-xl bg-secondary",
+          skin
+            ? "aspect-[4/3] bg-[radial-gradient(70%_70%_at_50%_45%,color-mix(in_oklab,var(--primary)_22%,transparent),transparent_75%)]"
+            : "aspect-square",
+        )}
+      >
         <ProductImage
           src={product.imageUrl}
           alt=""
@@ -31,7 +50,8 @@ export function ProductCard({ product, priority }: { product: ProductCardData; p
           priority={priority}
           sizes="(min-width: 1024px) 220px, (min-width: 640px) 33vw, 50vw"
           className={cn(
-            "object-cover object-top transition-transform duration-500 group-hover:scale-[1.06]",
+            "transition-transform duration-500 group-hover:scale-[1.06]",
+            skin ? "object-contain p-3 drop-shadow-[0_10px_14px_rgba(0,0,0,0.5)]" : "object-cover object-top",
             !product.inStock && "grayscale",
           )}
         />
@@ -50,7 +70,9 @@ export function ProductCard({ product, priority }: { product: ProductCardData; p
         </div>
       </div>
       <div className="flex flex-1 flex-col gap-1 px-1 pt-3 pb-1">
-        <p className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">{product.categoryName}</p>
+        <p className="text-[0.7rem] font-medium tracking-wide text-muted-foreground uppercase">
+          {product.subcategoryName ?? product.categoryName}
+        </p>
         <h3 className="line-clamp-2 text-sm leading-snug font-semibold text-foreground">
           <Link
             href={href(`/product/${product.slug}`)}
@@ -66,6 +88,7 @@ export function ProductCard({ product, priority }: { product: ProductCardData; p
               priceMinor={product.priceMinor}
               officialPriceMinor={product.officialPriceMinor}
               currency={product.currency}
+              label={officialPriceLabel}
               className="mt-0.5"
             />
           </div>

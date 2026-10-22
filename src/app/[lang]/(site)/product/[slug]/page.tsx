@@ -22,6 +22,8 @@ import { getI18n } from "@/i18n/server";
 import { getProduct, getProductSlugs, getRelatedProducts } from "@/lib/catalog";
 import { formatPrice } from "@/lib/format";
 import { absoluteAsset, absoluteUrl, breadcrumbLd, pageMetadata, siteUrl } from "@/lib/seo";
+import { CS2_CATEGORY } from "@/lib/site";
+import { cn } from "@/lib/utils";
 import { JsonLd } from "@/components/site/json-ld";
 import { BuyBox } from "./buy-box";
 import { CheckoutNotice } from "@/components/shop/checkout-notice";
@@ -78,11 +80,17 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
   const automatic = product.deliveryType === "automatic";
   const lowStock = product.inStock && product.stock !== null && product.stock <= 5;
   const steps = automatic ? dict.product.stepsAutomatic : dict.product.stepsManual;
-  const categoryHref = href(`/marketplace?category=${product.categorySlug}`);
+  const categoryPath = `/marketplace?category=${product.categorySlug}`;
+  const categoryHref = href(categoryPath);
+  // Products in a subcategory (e.g. Brawl Stars in Mobile Games) link to it as well.
+  const subPath = product.subcategorySlug ? `${categoryPath}&sub=${product.subcategorySlug}` : null;
+  const groupName = product.subcategoryName ?? product.categoryName;
+  // CS2 skins get the CS2 page's gold theme and are shown whole (wide weapon renders).
+  const skin = product.categorySlug === CS2_CATEGORY;
   const productUrl = absoluteUrl(locale, `/product/${product.slug}`);
 
   return (
-    <div className="pt-[4.5rem]">
+    <div className="pt-[4.5rem]" data-theme={skin ? "gold" : undefined}>
       <JsonLd
         data={[
           {
@@ -93,7 +101,7 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
             image: product.imageUrl ? [absoluteAsset(product.imageUrl)] : undefined,
             sku: product.slug,
             category: product.categoryName,
-            brand: { "@type": "Brand", name: product.categoryName },
+            brand: { "@type": "Brand", name: groupName },
             url: productUrl,
             offers: {
               "@type": "Offer",
@@ -107,7 +115,8 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
           },
           breadcrumbLd([
             { name: dict.nav.marketplace, url: absoluteUrl(locale, "/marketplace") },
-            { name: product.categoryName, url: absoluteUrl(locale, `/marketplace?category=${product.categorySlug}`) },
+            { name: product.categoryName, url: absoluteUrl(locale, categoryPath) },
+            ...(subPath && product.subcategoryName ? [{ name: product.subcategoryName, url: absoluteUrl(locale, subPath) }] : []),
             { name: product.name, url: productUrl },
           ]),
         ]}
@@ -123,6 +132,14 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
             {product.categoryName}
           </Link>
           <ChevronRightIcon className="size-3" />
+          {subPath && (
+            <>
+              <Link href={href(subPath)} className="hover:text-foreground">
+                {product.subcategoryName}
+              </Link>
+              <ChevronRightIcon className="size-3" />
+            </>
+          )}
           <span className="truncate text-foreground">{product.name}</span>
         </nav>
 
@@ -131,20 +148,25 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
         </Suspense>
 
         <div className="mt-8 grid gap-10 lg:grid-cols-[minmax(0,26rem)_1fr] lg:gap-16">
-          <div className="relative aspect-[4/5] overflow-hidden rounded-3xl border border-white/[0.06] bg-card lg:sticky lg:top-24 lg:self-start">
+          <div
+            className={cn(
+              "relative aspect-[4/5] overflow-hidden rounded-3xl border border-white/[0.06] bg-card lg:sticky lg:top-24 lg:self-start",
+              skin && "bg-[radial-gradient(70%_60%_at_50%_45%,color-mix(in_oklab,var(--primary)_24%,transparent),transparent_75%)]",
+            )}
+          >
             <ProductImage
               src={product.imageUrl}
               alt={product.name}
               fill
               loading="eager"
               sizes="(min-width: 1024px) 416px, 100vw"
-              className="object-cover"
+              className={cn(skin ? "object-contain p-6 drop-shadow-[0_16px_24px_rgba(0,0,0,0.55)]" : "object-cover")}
             />
           </div>
 
           <div>
-            <Link href={categoryHref} className="text-xs font-semibold tracking-wider text-primary uppercase">
-              {product.categoryName}
+            <Link href={subPath ? href(subPath) : categoryHref} className="text-xs font-semibold tracking-wider text-primary uppercase">
+              {groupName}
             </Link>
             <h1 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">{product.name}</h1>
 
@@ -165,7 +187,7 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
               </span>
             </div>
 
-            <BuyBox productId={product.id} productName={product.name} priceMinor={product.priceMinor} officialPriceMinor={product.officialPriceMinor} currency={product.currency} inStock={product.inStock} />
+            <BuyBox productId={product.id} productName={product.name} priceMinor={product.priceMinor} officialPriceMinor={product.officialPriceMinor} officialPriceLabel={skin ? dict.cs2.marketPrice : undefined} currency={product.currency} inStock={product.inStock} />
 
             <p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
               <ShieldCheckIcon className="size-4 text-primary" />
@@ -233,7 +255,7 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
               </div>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
                 {related.map((p) => (
-                  <ProductCard key={p.id} product={p} />
+                  <ProductCard key={p.id} product={p} skin={skin} officialPriceLabel={skin ? dict.cs2.marketPrice : undefined} />
                 ))}
               </div>
             </section>

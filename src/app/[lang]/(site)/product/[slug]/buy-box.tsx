@@ -17,6 +17,7 @@ export function BuyBox({
   productName,
   priceMinor,
   officialPriceMinor,
+  officialPriceLabel,
   currency,
   inStock,
 }: {
@@ -24,6 +25,8 @@ export function BuyBox({
   productName: string;
   priceMinor: number;
   officialPriceMinor: number | null;
+  /** What the compared price is called (e.g. "Steam Market price" for CS2 skins). */
+  officialPriceLabel?: string;
   currency: string;
   inStock: boolean;
 }) {
@@ -50,6 +53,7 @@ export function BuyBox({
             priceMinor={priceMinor}
             officialPriceMinor={officialPriceMinor}
             currency={currency}
+            label={officialPriceLabel}
             size="lg"
             className="mt-2"
           />

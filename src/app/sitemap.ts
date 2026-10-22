@@ -2,10 +2,12 @@ import type { MetadataRoute } from "next";
 import { LOCALES, type Locale } from "@/i18n/config";
 import { getSitemapData } from "@/lib/catalog";
 import { absoluteUrl, languageAlternates } from "@/lib/seo";
+import { CS2_CATEGORY } from "@/lib/site";
 
 const STATIC_PAGES: { path: string; priority: number; changeFrequency: "daily" | "weekly" | "monthly" | "yearly" }[] = [
   { path: "/", priority: 1, changeFrequency: "daily" },
   { path: "/marketplace", priority: 0.9, changeFrequency: "daily" },
+  { path: "/cs2", priority: 0.8, changeFrequency: "weekly" },
   { path: "/about", priority: 0.5, changeFrequency: "monthly" },
   { path: "/contact", priority: 0.5, changeFrequency: "monthly" },
   { path: "/terms", priority: 0.2, changeFrequency: "yearly" },
@@ -29,7 +31,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return LOCALES.flatMap((locale) => [
     ...STATIC_PAGES.map((p) => entry(locale, p.path, { priority: p.priority, changeFrequency: p.changeFrequency })),
-    ...categories.map((c) =>
+    // CS2 is listed as /cs2 (its marketplace view redirects there).
+    ...categories.filter((c) => c.slug !== CS2_CATEGORY).map((c) =>
       entry(locale, `/marketplace?category=${c.slug}`, { lastModified: c.updatedAt, changeFrequency: "weekly", priority: 0.7 }),
     ),
     ...products.map((p) =>

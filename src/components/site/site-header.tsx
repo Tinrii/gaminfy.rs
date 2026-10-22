@@ -129,6 +129,8 @@ function NavLinks({ mobile, pathname, onNavigate }: NavLinksProps) {
     { path: "/about", label: dict.nav.about },
     { path: "/marketplace", label: dict.nav.marketplace },
     { path: "/contact", label: dict.nav.contact },
+    // Gold, like the CS2 page it opens.
+    { path: "/cs2", label: dict.nav.cs2, gold: true },
   ];
 
   return links.map((item) => {
@@ -145,11 +147,15 @@ function NavLinks({ mobile, pathname, onNavigate }: NavLinksProps) {
           mobile
             ? "rounded-xl px-3 py-3 text-base"
             : "relative text-sm after:absolute after:-bottom-1.5 after:left-0 after:h-0.5 after:w-full after:origin-left after:scale-x-0 after:rounded-full after:bg-primary after:transition-transform hover:text-foreground",
-          active
-            ? mobile
-              ? "bg-secondary font-semibold text-foreground"
-              : "font-semibold text-foreground after:scale-x-100"
-            : "text-muted-foreground",
+          // ("cn" doesn't merge conflicting classes, so the gold link gets its own color branch.)
+          item.gold && "font-semibold text-[var(--gold)] drop-shadow-[0_0_10px_rgba(255,192,53,0.35)]",
+          item.gold && active && (mobile ? "bg-secondary" : "after:scale-x-100"),
+          !item.gold &&
+            (active
+              ? mobile
+                ? "bg-secondary font-semibold text-foreground"
+                : "font-semibold text-foreground after:scale-x-100"
+              : "text-muted-foreground"),
         )}
       >
         {item.label}

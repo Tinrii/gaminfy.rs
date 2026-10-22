@@ -19,6 +19,7 @@ export function OfficialPrice({
   officialPriceMinor,
   currency,
   size = "sm",
+  label,
   className,
 }: {
   priceMinor: number;
@@ -26,20 +27,23 @@ export function OfficialPrice({
   currency: string;
   /** "sm" for product cards, "lg" for the product page. */
   size?: "sm" | "lg";
+  /** What the compared price is called; defaults to the official in-game store price. */
+  label?: string;
   className?: string;
 }) {
   const { dict } = useI18n();
   const p = dict.product;
+  const name = label ?? p.officialPrice;
   const percent = savingsPercent(priceMinor, officialPriceMinor);
   if (percent === null || !officialPriceMinor) return null;
 
   if (size === "sm") {
     return (
-      <span className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs", className)} title={p.officialPrice}>
-        <span className="sr-only">{p.officialPrice}: </span>
-        <Price minor={officialPriceMinor} currency={currency} className="text-muted-foreground line-through decoration-muted-foreground/70" />
+      <span className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs", className)} title={name}>
+        <span className="sr-only">{name}: </span>
+        <Price minor={officialPriceMinor} currency={currency} className="font-medium text-red-400 line-through decoration-red-400/80" />
         {percent > 0 && (
-          <span className="rounded-md bg-emerald-400/10 px-1.5 py-px font-semibold text-emerald-400 tabular-nums">−{percent}%</span>
+          <span className="rounded-md bg-red-500 px-1.5 py-px font-bold text-white tabular-nums">−{percent}%</span>
         )}
       </span>
     );
@@ -48,16 +52,16 @@ export function OfficialPrice({
   return (
     <div className={cn("space-y-1 text-sm", className)}>
       <p className="text-muted-foreground">
-        {p.officialPrice}:{" "}
-        <Price minor={officialPriceMinor} currency={currency} className="line-through decoration-muted-foreground/70" />
+        {name}:{" "}
+        <Price minor={officialPriceMinor} currency={currency} className="font-medium text-red-400 line-through decoration-red-400/80" />
       </p>
-      <p className="inline-flex flex-wrap items-center gap-2 font-medium text-emerald-400">
+      <p className="inline-flex flex-wrap items-center gap-2 font-medium text-red-400">
         <span>
           {p.youSave.split("{amount}")[0]}
           <Price minor={officialPriceMinor - priceMinor} currency={currency} className="font-semibold" />
           {p.youSave.split("{amount}")[1]}
         </span>
-        {percent > 0 && <span className="rounded-md bg-emerald-400/10 px-1.5 py-0.5 text-xs font-semibold tabular-nums">−{percent}%</span>}
+        {percent > 0 && <span className="rounded-md bg-red-500 px-1.5 py-0.5 text-xs font-bold text-white tabular-nums">−{percent}%</span>}
       </p>
     </div>
   );

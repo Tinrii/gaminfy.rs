@@ -62,6 +62,43 @@
   --gold: #ffc035;
 }
 
+/*
+ * Gold theme for the CS2 page (and CS2 product pages), from the client's gold artwork.
+ * Applied to the whole document while such a page is open, so the header, footer,
+ * menus and dialogs switch along with it.
+ * Next keeps the page you navigated away from mounted but hidden (React <Activity> sets
+ * `display: none !important` on it), so a hidden gold page must not count.
+ */
+:root:has([data-theme="gold"]:not([style*="display: none"])) {
+  --background: #0d0a03;
+  --foreground: #fbf7ea;
+
+  --card: #1a1406;
+  --card-foreground: #fbf7ea;
+  --popover: #1c1607;
+  --popover-foreground: #fbf7ea;
+
+  --primary: #f4c430;
+  --primary-foreground: #1a1300;
+
+  --secondary: #2a210a;
+  --secondary-foreground: #f2e9cf;
+
+  --muted: #241c08;
+  --muted-foreground: #c2b089;
+
+  --accent: #33290c;
+  --accent-foreground: #fbf7ea;
+
+  --ring: #f4c430;
+
+  --ink: #070500;
+  --surface: #1a1406;
+  --surface-raised: #241c08;
+  --brand: #d9a514;
+  --brand-deep: #8c6a09;
+}
+
 @theme inline {
   --font-sans: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;
   --font-heading: var(--font-poppins), ui-sans-serif, system-ui, sans-serif;

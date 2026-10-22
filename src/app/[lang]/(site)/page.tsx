@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { TESTIMONIALS, type Testimonial } from "@/content/testimonials";
 import type { Locale } from "@/i18n/config";
 import { getI18n } from "@/i18n/server";
-import { getCategories, getSiteStats } from "@/lib/catalog";
+import { getCategories, getSearchTargets, getSiteStats } from "@/lib/catalog";
 import { Hero } from "./_home/hero";
 import { TestimonialsCarousel } from "./_home/testimonials-carousel";
 import type { Metadata } from "next";
@@ -22,13 +22,13 @@ const FEATURE_ICONS = [ZapIcon, ShieldCheckIcon, Gamepad2Icon, HeadsetIcon];
 
 export default async function HomePage() {
   const { locale, dict, href } = await getI18n();
-  const [categories, stats] = await Promise.all([getCategories(locale), getSiteStats()]);
+  const [categories, searchTargets, stats] = await Promise.all([getCategories(locale), getSearchTargets(locale), getSiteStats()]);
 
   return (
     <>
       <Hero
         categories={categories.map((c) => ({ slug: c.slug, name: c.name, imageUrl: c.imageUrl }))}
-        searchCategories={categories.map((c) => ({ slug: c.slug, name: c.name, imageUrl: c.thumbUrl ?? c.imageUrl, offers: c.offers }))}
+        searchCategories={searchTargets}
       />
 
       <Reveal>

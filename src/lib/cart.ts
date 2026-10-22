@@ -1,7 +1,7 @@
 import "server-only";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Locale } from "@/i18n/config";
-import { AVAILABLE_CODES_SQL } from "@/lib/catalog";
+import { AVAILABLE_CODES_SQL, productGroupName } from "@/lib/catalog";
 import { validateCoupon, type CouponError } from "@/lib/coupons";
 import { db, schema } from "@/lib/db";
 
@@ -75,7 +75,7 @@ export async function quoteCart(rawItems: unknown, locale: Locale, couponCode?: 
           name: products.name,
           nameEn: products.nameEn,
           imageUrl: sql<string | null>`coalesce(${products.imageUrl}, ${categories.thumbUrl}, ${categories.imageUrl})`,
-          categoryName: categories.name,
+          categoryName: productGroupName(locale),
           deliveryType: products.deliveryType,
           priceMinor: products.priceMinor,
           officialPriceMinor: products.officialPriceMinor,

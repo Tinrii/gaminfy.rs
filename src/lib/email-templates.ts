@@ -179,7 +179,8 @@ export function contactEmail(m: { name: string; email: string; message: string }
     html: layout(
       "en",
       "New contact message",
-      p(`<strong style="color:#fff">${esc(m.name)}</strong> &lt;${esc(m.email)}&gt;`) +
+      // CS2 requests may come with an Instagram/WhatsApp contact instead of an email.
+      p(`<strong style="color:#fff">${esc(m.name)}</strong>${m.email ? ` &lt;${esc(m.email)}&gt;` : ""}`) +
         `<div style="padding:16px;background:#001613;border-radius:12px;font-size:14px;line-height:1.6;color:#cfe3dc;white-space:pre-wrap">${esc(m.message)}</div>`,
     ),
   };

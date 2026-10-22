@@ -143,8 +143,17 @@ function CategoryDialog({
 
         <form action={action} className="grid content-start gap-4 sm:grid-cols-2">
           {category && <input type="hidden" name="id" value={category.id} />}
-          <F label="Name" id="cat-name">
+          <F label="Name — Serbian" id="cat-name">
             <Input id="cat-name" name="name" required defaultValue={category?.name} className="h-10 rounded-xl" />
+          </F>
+          <F label="Name — English" id="cat-name-en">
+            <Input
+              id="cat-name-en"
+              name="nameEn"
+              defaultValue={category?.nameEn ?? ""}
+              placeholder="Same as Serbian"
+              className="h-10 rounded-xl"
+            />
           </F>
           <F label="URL slug" id="cat-slug">
             <Input id="cat-slug" name="slug" defaultValue={category?.slug} placeholder="auto" className="h-10 rounded-xl" />
