@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
     authInterrupts: true,
     // Admin image uploads are downscaled in the browser first; 4 MB stays under Vercel's 4.5 MB limit.
     serverActions: { bodySizeLimit: "4mb" },
+    agentUpgrade: "security",
   },
   images: {
     remotePatterns: [
