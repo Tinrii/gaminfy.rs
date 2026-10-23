@@ -49,7 +49,19 @@ export default async function Cs2Page() {
     <div data-theme="gold" className="relative isolate overflow-x-clip">
       <GoldBackground />
 
-      <section className="pt-[4.5rem]">
+      <section className="relative isolate pt-[4.5rem]">
+        {/* The home hero's artwork in gold, faded out at the bottom so the gold background continues below. */}
+        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 [mask-image:linear-gradient(to_bottom,#000_55%,transparent)]">
+          <Image
+            src="/cs2/heroes-battle-gold.webp"
+            alt=""
+            fill
+            priority
+            sizes="100vw"
+            className="object-cover object-top opacity-25 blur-[2px]"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-background/40 via-background/50 to-transparent" />
+        </div>
         <div className="container-page grid items-center gap-10 pt-8 pb-16 sm:pt-14 lg:grid-cols-[1.05fr_1fr] lg:gap-14 lg:pt-20 lg:pb-24">
           <div>
             <span className="inline-flex items-center gap-2 rounded-full border border-primary/35 bg-primary/10 px-3 py-1 text-[0.7rem] font-semibold tracking-[0.18em] text-primary uppercase">
