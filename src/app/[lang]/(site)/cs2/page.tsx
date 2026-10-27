@@ -50,10 +50,10 @@ export default async function Cs2Page() {
       <GoldBackground />
 
       <section className="relative isolate pt-[4.5rem]">
-        {/* The home hero's artwork in gold, faded out at the bottom so the gold background continues below. */}
+        {/* CS2 key art in gold (like the home hero's artwork), faded out at the bottom so the gold background continues below. */}
         <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 [mask-image:linear-gradient(to_bottom,#000_55%,transparent)]">
           <Image
-            src="/cs2/heroes-battle-gold.webp"
+            src="/cs2/hero-bg.webp"
             alt=""
             fill
             priority
