@@ -18,7 +18,7 @@ export function ProductCard({
 }: {
   product: ProductCardData;
   priority?: boolean;
-  /** CS2 skins: wide weapon renders, shown whole on a glow instead of cropped to a square. */
+  /** CS2 skins: wide weapon renders, shown whole on a glow instead of cropped to fill. */
   skin?: boolean;
   /** Overrides what the struck-through price is called (e.g. "Steam Market price"). */
   officialPriceLabel?: string;
@@ -37,10 +37,9 @@ export function ProductCard({
     >
       <div
         className={cn(
-          "relative overflow-hidden rounded-xl bg-secondary",
-          skin
-            ? "aspect-[4/3] bg-[radial-gradient(70%_70%_at_50%_45%,color-mix(in_oklab,var(--primary)_22%,transparent),transparent_75%)]"
-            : "aspect-square",
+          "relative aspect-[4/3] overflow-hidden rounded-xl bg-secondary",
+          skin &&
+            "bg-[radial-gradient(70%_70%_at_50%_45%,color-mix(in_oklab,var(--primary)_22%,transparent),transparent_75%)]",
         )}
       >
         <ProductImage

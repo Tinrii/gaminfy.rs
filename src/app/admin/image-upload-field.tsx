@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 import { uploadImage, type UploadKind } from "./actions";
 
 const ASPECT: Record<UploadKind, string> = {
-  product: "aspect-square",
+  product: "aspect-[4/3]",
   categoryCover: "aspect-[4/5]",
   categoryThumb: "aspect-square",
   subcategory: "aspect-square",
