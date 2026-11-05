@@ -173,7 +173,7 @@ function MarketplaceSkeleton() {
       <Skeleton className="mt-6 h-12 w-full rounded-2xl" />
       <div className="mt-14 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         {Array.from({ length: 10 }, (_, i) => (
-          <Skeleton key={i} className="aspect-[4/5] rounded-2xl" />
+          <Skeleton key={i} className="aspect-[3/4] rounded-2xl" />
         ))}
       </div>
     </section>
