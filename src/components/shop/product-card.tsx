@@ -15,6 +15,7 @@ export function ProductCard({
   priority,
   skin,
   officialPriceLabel,
+  fitImage,
 }: {
   product: ProductCardData;
   priority?: boolean;
@@ -22,6 +23,8 @@ export function ProductCard({
   skin?: boolean;
   /** Overrides what the struck-through price is called (e.g. "Steam Market price"). */
   officialPriceLabel?: string;
+  /** Show the whole image at full card width and its own height instead of cropping it to a square. */
+  fitImage?: boolean;
 }) {
   const { dict, href } = useI18n();
   // The whole card is clickable through the title link's stretched ::after, which
@@ -40,18 +43,23 @@ export function ProductCard({
           "relative overflow-hidden rounded-xl bg-secondary",
           skin
             ? "aspect-[4/3] bg-[radial-gradient(70%_70%_at_50%_45%,color-mix(in_oklab,var(--primary)_22%,transparent),transparent_75%)]"
-            : "aspect-square",
+            : !fitImage && "aspect-square",
         )}
       >
         <ProductImage
           src={product.imageUrl}
           alt=""
-          fill
+          // fitImage: full card width at the image's own height (no crop, no bars).
+          {...(fitImage && !skin ? { width: 0, height: 0 } : { fill: true })}
           priority={priority}
           sizes="(min-width: 1024px) 220px, (min-width: 640px) 33vw, 50vw"
           className={cn(
             "transition-transform duration-500 group-hover:scale-[1.06]",
-            skin ? "object-contain p-3 drop-shadow-[0_10px_14px_rgba(0,0,0,0.5)]" : "object-cover object-top",
+            skin
+              ? "object-contain p-3 drop-shadow-[0_10px_14px_rgba(0,0,0,0.5)]"
+              : fitImage
+                ? "block h-auto w-full"
+                : "object-cover object-top",
             !product.inStock && "grayscale",
           )}
         />
