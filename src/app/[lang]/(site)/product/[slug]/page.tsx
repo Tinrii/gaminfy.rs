@@ -212,7 +212,9 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
             {product.description && (
               <section className="mt-10">
                 <h2 className="text-sm font-semibold">{dict.product.about}</h2>
-                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{product.description}</p>
+                <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                  {product.description}
+                </p>
               </section>
             )}
 
