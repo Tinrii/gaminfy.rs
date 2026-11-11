@@ -46,7 +46,7 @@ export default async function Image({ params }: { params: Promise<{ lang: string
                     padding: "10px 24px",
                   }}
                 >
-                  {formatPrice(product.priceMinor, product.currency, locale)}
+                  {`${product.variants.length ? `${dict.product.from} ` : ""}${formatPrice(product.priceMinor, product.currency, locale)}`}
                 </div>
                 <div style={{ marginLeft: 20, fontSize: 24, color: "#8eb0a5" }}>
                   {product.deliveryType === "automatic" ? dict.product.instantDelivery : dict.product.teamDelivery}

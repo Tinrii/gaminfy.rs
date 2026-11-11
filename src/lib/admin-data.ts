@@ -6,8 +6,19 @@ import type { OrderStatus } from "@/lib/db/schema";
 
 // Every caller must run requireAdmin() first — these return data across all users.
 
-const { orders, orderItems, coupons, products, productCodes, categories, subcategories, users, contactMessages, fulfillmentDetails } =
-  schema;
+const {
+  orders,
+  orderItems,
+  coupons,
+  products,
+  productVariants,
+  productCodes,
+  categories,
+  subcategories,
+  users,
+  contactMessages,
+  fulfillmentDetails,
+} = schema;
 
 const freeCodes = sql<number>`${AVAILABLE_CODES_SQL}`;
 
@@ -64,7 +75,7 @@ export async function listOrders({ status, limit = 100 }: { status?: OrderStatus
     ? await db()
         .select({
           orderId: orderItems.orderId,
-          name: sql<string>`coalesce(${products.name}, ${orderItems.productName})`,
+          name: sql<string>`concat(coalesce(${products.name}, ${orderItems.productName}), coalesce(concat(' — ', ${orderItems.variantName}), ''))`,
           quantity: orderItems.quantity,
           deliveryType: products.deliveryType,
         })
@@ -107,11 +118,23 @@ export async function listProductsAdmin() {
       isActive: products.isActive,
       categoryName: categories.name,
       codes: freeCodes,
+      /** Active options; with any, the price and stock live on them (edited on the product page). */
+      variants: sql<number>`${sql.raw("(select count(*) from `product_variants` v where v.`product_id` = `products`.`id` and v.`is_active` = true)")}`,
+      /** Manual stock summed over options (null if any option is unlimited). */
+      variantStock: sql<number | null>`${sql.raw("(select if(sum(v.`manual_stock` is null) > 0, null, sum(v.`manual_stock`)) from `product_variants` v where v.`product_id` = `products`.`id` and v.`is_active` = true)")}`,
     })
     .from(products)
     .innerJoin(categories, eq(products.categoryId, categories.id))
     .orderBy(asc(categories.sortOrder), asc(products.sortOrder), asc(products.id));
-  return rows.map((r) => ({ ...r, codes: Number(r.codes) }));
+  return rows.map(({ variants, variantStock, ...r }) => {
+    const variantCount = Number(variants);
+    return {
+      ...r,
+      codes: Number(r.codes),
+      variantCount,
+      manualStock: variantCount > 0 ? (variantStock === null ? null : Number(variantStock)) : r.manualStock,
+    };
+  });
 }
 
 export type AdminProductRow = Awaited<ReturnType<typeof listProductsAdmin>>[number];
@@ -119,18 +142,26 @@ export type AdminProductRow = Awaited<ReturnType<typeof listProductsAdmin>>[numb
 export async function getProductAdmin(id: number) {
   const [product] = await db().select().from(products).where(eq(products.id, id));
   if (!product) return null;
-  const codes = await db()
-    .select({
-      id: productCodes.id,
-      code: productCodes.code,
-      orderId: productCodes.orderId,
-      createdAt: productCodes.createdAt,
-    })
-    .from(productCodes)
-    .where(eq(productCodes.productId, id))
-    .orderBy(sql`${productCodes.orderId} is not null`, desc(productCodes.id))
-    .limit(500);
-  return { product, codes };
+  const [codes, variants] = await Promise.all([
+    db()
+      .select({
+        id: productCodes.id,
+        code: productCodes.code,
+        variantId: productCodes.variantId,
+        orderId: productCodes.orderId,
+        createdAt: productCodes.createdAt,
+      })
+      .from(productCodes)
+      .where(eq(productCodes.productId, id))
+      .orderBy(sql`${productCodes.orderId} is not null`, desc(productCodes.id))
+      .limit(500),
+    db()
+      .select()
+      .from(productVariants)
+      .where(and(eq(productVariants.productId, id), eq(productVariants.isActive, true)))
+      .orderBy(asc(productVariants.sortOrder), asc(productVariants.id)),
+  ]);
+  return { product, codes, variants };
 }
 
 export async function listCategoriesAdmin() {
@@ -168,13 +199,21 @@ export async function listMessages() {
   return db().select().from(contactMessages).orderBy(asc(contactMessages.isHandled), desc(contactMessages.createdAt)).limit(200);
 }
 
-export async function unassignedCodeCount(productId: number) {
+/** Free codes an order line could take: its option's codes, or a plain product's untagged ones. */
+export async function unassignedCodeCount(productId: number, variantId: number | null = null) {
   const [{ n }] = await db()
     .select({ n: count() })
     .from(productCodes)
-    .where(and(eq(productCodes.productId, productId), isNull(productCodes.orderId)));
+    .where(
+      and(
+        eq(productCodes.productId, productId),
+        variantId ? eq(productCodes.variantId, variantId) : isNull(productCodes.variantId),
+        isNull(productCodes.orderId),
+      ),
+    );
   return n;
 }
+
 
 /** Image paths already used by categories/products — suggestions for admin image fields. */
 export async function listKnownImages(): Promise<string[]> {

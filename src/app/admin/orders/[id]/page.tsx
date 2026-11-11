@@ -36,7 +36,7 @@ async function AdminOrder({ params }: Pick<PageProps<"/admin/orders/[id]">, "par
   const missing = items.filter((i) => i.deliveryType === "automatic" && i.codes.length < i.quantity);
   const canAssign = missing.length > 0 && (order.status === "paid" || order.status === "processing");
   const freeCodes = canAssign
-    ? await Promise.all(missing.map(async (i) => ({ name: i.name, free: await unassignedCodeCount(i.productId) })))
+    ? await Promise.all(missing.map(async (i) => ({ name: i.name, free: await unassignedCodeCount(i.productId, i.variantId) })))
     : [];
 
   return (

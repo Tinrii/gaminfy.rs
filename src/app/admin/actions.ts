@@ -12,7 +12,8 @@ import { fillMissingCodes, notifyDelivered } from "@/lib/orders";
 import { putPublicObject } from "@/lib/storage";
 import sharp from "sharp";
 
-const { products, productCodes, categories, subcategories, orders, orderItems, contactMessages, coupons } = schema;
+const { products, productVariants, productCodes, categories, subcategories, orders, orderItems, contactMessages, coupons } =
+  schema;
 
 export type AdminState = { ok?: boolean; error?: string; message?: string };
 
@@ -38,6 +39,103 @@ const imagePath = z
   .refine((v) => v === "" || v.startsWith("/") || /^https:\/\//.test(v), "Image must be a /path or an https:// URL.")
   .transform((v) => v || null);
 
+const optionalPrice = (label: string) =>
+  z
+    .string()
+    .trim()
+    .transform((v) => (v === "" ? null : Number(v)))
+    .refine((v) => v === null || (Number.isFinite(v) && v > 0 && v <= 10_000_000), `${label} must be a positive number or empty.`);
+const optionalStock = z
+  .string()
+  .trim()
+  .transform((v) => (v === "" ? null : Number(v)))
+  .refine((v) => v === null || (Number.isInteger(v) && v >= 0), "Stock must be a whole number or empty.");
+
+const variantSchema = z.object({
+  id: z.coerce.number().int().positive().nullable(),
+  name: text(120).min(1, "Every option needs a Serbian name."),
+  nameEn: optionalText(120),
+  price: z.coerce.number().positive("Every option needs a price greater than 0.").max(10_000_000),
+  officialPrice: optionalPrice("An option's official price"),
+  manualStock: optionalStock,
+});
+
+/** The options editor posts parallel arrays; fully empty rows are ignored. */
+function parseVariants(formData: FormData) {
+  const col = (name: string) => formData.getAll(name).map((v) => String(v));
+  const [ids, names, namesEn, prices, officials, stocks] = [
+    col("variantId"),
+    col("variantName"),
+    col("variantNameEn"),
+    col("variantPrice"),
+    col("variantOfficialPrice"),
+    col("variantStock"),
+  ];
+  const rows = names
+    .map((name, i) => ({
+      id: ids[i] || null,
+      name,
+      nameEn: namesEn[i] ?? "",
+      price: prices[i] ?? "",
+      officialPrice: officials[i] ?? "",
+      manualStock: stocks[i] ?? "",
+    }))
+    .filter((r) => [r.name, r.nameEn, r.price, r.officialPrice, r.manualStock].some((v) => v.trim() !== ""));
+  return z.array(variantSchema).max(30, "Up to 30 options per product.").safeParse(rows);
+}
+
+type Tx = Parameters<Parameters<ReturnType<typeof db>["transaction"]>[0]>[0];
+
+/**
+ * Makes the product's active options match the form: updates kept ones, inserts new
+ * ones, and removes the rest — or only switches them off if orders or codes use them.
+ */
+async function syncVariants(
+  tx: Tx,
+  productId: number,
+  rows: z.infer<typeof variantSchema>[],
+  deliveryType: "automatic" | "manual",
+) {
+  const existing = await tx
+    .select({ id: productVariants.id })
+    .from(productVariants)
+    .where(and(eq(productVariants.productId, productId), eq(productVariants.isActive, true)));
+  const existingIds = new Set(existing.map((e) => e.id));
+
+  for (const [sortOrder, row] of rows.entries()) {
+    const values = {
+      name: row.name,
+      nameEn: row.nameEn,
+      priceMinor: Math.round(row.price * 100),
+      officialPriceMinor: row.officialPrice === null ? null : Math.round(row.officialPrice * 100),
+      manualStock: deliveryType === "manual" ? row.manualStock : null,
+      sortOrder,
+    };
+    // productId in the WHERE so a forged id can't edit another product's option.
+    if (row.id && existingIds.has(row.id)) {
+      await tx
+        .update(productVariants)
+        .set(values)
+        .where(and(eq(productVariants.id, row.id), eq(productVariants.productId, productId)));
+    } else {
+      await tx.insert(productVariants).values({ ...values, productId });
+    }
+  }
+
+  const kept = new Set(rows.map((r) => r.id));
+  for (const { id } of existing.filter((e) => !kept.has(e.id))) {
+    const [[used], [codes]] = await Promise.all([
+      tx.select({ n: sql<number>`count(*)` }).from(orderItems).where(eq(orderItems.variantId, id)),
+      tx.select({ n: sql<number>`count(*)` }).from(productCodes).where(eq(productCodes.variantId, id)),
+    ]);
+    if (Number(used.n) > 0 || Number(codes.n) > 0) {
+      await tx.update(productVariants).set({ isActive: false }).where(eq(productVariants.id, id));
+    } else {
+      await tx.delete(productVariants).where(eq(productVariants.id, id));
+    }
+  }
+}
+
 const productSchema = z.object({
   id: z.coerce.number().int().positive().optional(),
   name: text(200).min(2, "Serbian name is required."),
@@ -46,11 +144,7 @@ const productSchema = z.object({
   categoryId: z.coerce.number().int().positive("Pick a category."),
   subcategoryId: z.coerce.number().int().positive().nullable(),
   price: z.coerce.number().positive("Price must be greater than 0.").max(10_000_000),
-  officialPrice: z
-    .string()
-    .trim()
-    .transform((v) => (v === "" ? null : Number(v)))
-    .refine((v) => v === null || (Number.isFinite(v) && v > 0 && v <= 10_000_000), "Official price must be a positive number or empty."),
+  officialPrice: optionalPrice("Official price"),
   currency: z.string().trim().length(3).toUpperCase().default("RSD"),
   deliveryType: z.enum(["automatic", "manual"]),
   description: optionalText(5000),
@@ -58,11 +152,7 @@ const productSchema = z.object({
   instructions: optionalText(5000),
   instructionsEn: optionalText(5000),
   imageUrl: imagePath,
-  manualStock: z
-    .string()
-    .trim()
-    .transform((v) => (v === "" ? null : Number(v)))
-    .refine((v) => v === null || (Number.isInteger(v) && v >= 0), "Stock must be a whole number or empty."),
+  manualStock: optionalStock,
   sortOrder: z.coerce.number().int().default(0),
   isActive: z.boolean(),
   contactFields: z.array(z.enum(CONTACT_FIELD_KEYS)),
@@ -71,6 +161,15 @@ const productSchema = z.object({
 export async function saveProduct(_prev: AdminState, formData: FormData): Promise<AdminState> {
   await requireAdmin();
 
+  const variants = parseVariants(formData);
+  if (!variants.success) return { error: variants.error.issues[0]?.message ?? "Check the options." };
+  // With options, the product's own price mirrors the cheapest one, so listings, sorting
+  // and price filters show "from" that price.
+  const cheapest = variants.data.reduce<(typeof variants.data)[number] | null>(
+    (min, v) => (min === null || v.price < min.price ? v : min),
+    null,
+  );
+
   const parsed = productSchema.safeParse({
     id: formData.get("id") || undefined,
     name: formData.get("name"),
@@ -78,8 +177,8 @@ export async function saveProduct(_prev: AdminState, formData: FormData): Promis
     slug: formData.get("slug") ?? "",
     categoryId: formData.get("categoryId"),
     subcategoryId: formData.get("subcategoryId") || null,
-    price: formData.get("price"),
-    officialPrice: formData.get("officialPrice") ?? "",
+    price: cheapest ? cheapest.price : formData.get("price"),
+    officialPrice: cheapest ? String(cheapest.officialPrice ?? "") : (formData.get("officialPrice") ?? ""),
     currency: formData.get("currency") || "RSD",
     deliveryType: formData.get("deliveryType"),
     description: formData.get("description") ?? "",
@@ -108,17 +207,23 @@ export async function saveProduct(_prev: AdminState, formData: FormData): Promis
     priceMinor: Math.round(price * 100),
     officialPriceMinor: officialPrice === null ? null : Math.round(officialPrice * 100),
     requiredContactFields: data.deliveryType === "manual" && contactFields.length ? contactFields.join(",") : null,
-    manualStock: data.deliveryType === "manual" ? data.manualStock : null,
+    // With options, stock lives on each option.
+    manualStock: data.deliveryType === "manual" && !cheapest ? data.manualStock : null,
   };
 
   let productId = id;
   try {
-    if (id) {
-      await db().update(products).set(values).where(eq(products.id, id));
-    } else {
-      const [res] = await db().insert(products).values(values);
-      productId = res.insertId;
-    }
+    productId = await db().transaction(async (tx) => {
+      let pid = id;
+      if (pid) {
+        await tx.update(products).set(values).where(eq(products.id, pid));
+      } else {
+        const [res] = await tx.insert(products).values(values);
+        pid = res.insertId;
+      }
+      await syncVariants(tx, pid, variants.data, data.deliveryType);
+      return pid;
+    });
   } catch (err) {
     if (isDuplicate(err)) return { error: "Another product already uses that slug." };
     throw err;
@@ -137,6 +242,12 @@ export async function updateProductPrice(_prev: AdminState, formData: FormData):
   if (!Number.isInteger(id) || !Number.isFinite(price) || price <= 0 || price > 10_000_000) {
     return { error: "Enter a valid price." };
   }
+  const [withOptions] = await db()
+    .select({ id: productVariants.id })
+    .from(productVariants)
+    .where(and(eq(productVariants.productId, id), eq(productVariants.isActive, true)))
+    .limit(1);
+  if (withOptions) return { error: "This product has options — set their prices on the product page." };
   await db().update(products).set({ priceMinor: Math.round(price * 100) }).where(eq(products.id, id));
   updateTag(CATALOG_TAG);
   refresh();
@@ -170,6 +281,7 @@ export async function deleteProduct(formData: FormData) {
   } else {
     await db().transaction(async (tx) => {
       await tx.delete(productCodes).where(eq(productCodes.productId, id));
+      await tx.delete(productVariants).where(eq(productVariants.productId, id));
       await tx.delete(products).where(eq(products.id, id));
     });
   }
@@ -188,6 +300,15 @@ export async function addCodes(_prev: AdminState, formData: FormData): Promise<A
   if (!Number.isInteger(productId) || unique.length === 0) return { error: "Paste at least one code (one per line)." };
   if (unique.some((c) => c.length > 1000)) return { error: "One of the codes is too long." };
 
+  // Products with options take codes per option, so each buyer gets a key for what they chose.
+  const options = await db()
+    .select({ id: productVariants.id })
+    .from(productVariants)
+    .where(and(eq(productVariants.productId, productId), eq(productVariants.isActive, true)));
+  const variantId = Number(formData.get("variantId")) || null;
+  if (options.length && !options.some((o) => o.id === variantId)) return { error: "Pick which option these codes are for." };
+  if (!options.length && variantId) return { error: "This product has no options — refresh the page." };
+
   const existing = await db()
     .select({ code: productCodes.code })
     .from(productCodes)
@@ -195,7 +316,8 @@ export async function addCodes(_prev: AdminState, formData: FormData): Promise<A
   const known = new Set(existing.map((e) => e.code));
   const fresh = unique.filter((c) => !known.has(c));
 
-  if (fresh.length) await db().insert(productCodes).values(fresh.map((code) => ({ productId, code })));
+  if (fresh.length) await db().insert(productCodes).values(fresh.map((code) => ({ productId, variantId, code })));
+
 
   updateTag(CATALOG_TAG);
   refresh();

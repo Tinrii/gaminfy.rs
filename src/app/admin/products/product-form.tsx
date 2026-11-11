@@ -4,22 +4,29 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { Product } from "@/lib/db/schema";
+import type { Product, ProductVariant } from "@/lib/db/schema";
 import { CONTACT_FIELD_KEYS, CONTACT_FIELD_LABEL, parseContactFields } from "@/lib/format";
 import { saveProduct } from "../actions";
 import { ImageUploadField } from "../image-upload-field";
 import { ActionForm, SubmitButton } from "../ui";
+import { VariantsEditor, toVariantRows } from "./variants-editor";
 
 const selectClass = "h-10 w-full rounded-xl border border-input bg-background px-3 text-sm";
 
+// Stable default: a fresh [] each render would retrigger the saved-options sync below.
+const NO_VARIANTS: ProductVariant[] = [];
+
 export function ProductForm({
   product,
+  variants = NO_VARIANTS,
   categories,
   subcategories,
   images,
   uploadsEnabled,
 }: {
   product?: Product;
+  /** Saved active options, in order. */
+  variants?: ProductVariant[];
   categories: { id: number; name: string; imageUrl: string | null }[];
   subcategories: { id: number; categoryId: number; name: string }[];
   images: string[];
@@ -30,6 +37,15 @@ export function ProductForm({
   const subOptions = subcategories.filter((s) => String(s.categoryId) === categoryId);
   const [delivery, setDelivery] = useState(product?.deliveryType ?? "automatic");
   const contact = parseContactFields(product?.requiredContactFields);
+
+  const [optionRows, setOptionRows] = useState(() => toVariantRows(variants));
+  // After a save the page re-renders with the stored options (new ones now have ids).
+  const [savedVariants, setSavedVariants] = useState(variants);
+  if (variants !== savedVariants) {
+    setSavedVariants(variants);
+    setOptionRows(toVariantRows(variants));
+  }
+  const hasOptions = optionRows.length > 0;
 
   return (
     <ActionForm action={saveProduct} className="space-y-6 rounded-2xl border border-white/[0.06] bg-card p-6">
@@ -82,14 +98,19 @@ export function ProductForm({
           </Field>
         )}
         <div className="grid grid-cols-[1fr_6rem] gap-3">
-          <Field label="Price" htmlFor="price" hint="In whole units, e.g. 1400 for 1,400 RSD.">
+          <Field
+            label="Price"
+            htmlFor="price"
+            hint={hasOptions ? "Set per option below — listings show the cheapest as “from”." : "In whole units, e.g. 1400 for 1,400 RSD."}
+          >
             <Input
               id="price"
               name="price"
               type="number"
               min={0}
               step="0.01"
-              required
+              required={!hasOptions}
+              disabled={hasOptions}
               defaultValue={product ? product.priceMinor / 100 : undefined}
               className="h-10 rounded-xl"
             />
@@ -101,7 +122,11 @@ export function ProductForm({
         <Field
           label="Official store price"
           htmlFor="officialPrice"
-          hint="Optional — what the same item costs in the official in-game store, in the same currency. When it's higher than your price, the cart shows how much the customer saves."
+          hint={
+            hasOptions
+              ? "Set per option below."
+              : "Optional — what the same item costs in the official in-game store, in the same currency. When it's higher than your price, the cart shows how much the customer saves."
+          }
         >
           <Input
             id="officialPrice"
@@ -109,6 +134,7 @@ export function ProductForm({
             type="number"
             min={0}
             step="0.01"
+            disabled={hasOptions}
             defaultValue={product?.officialPriceMinor != null ? product.officialPriceMinor / 100 : ""}
             placeholder="e.g. 950"
             className="h-10 rounded-xl"
@@ -146,18 +172,26 @@ export function ProductForm({
         </div>
       </fieldset>
 
+      <VariantsEditor rows={optionRows} onChange={setOptionRows} manual={delivery === "manual"} />
+
       {delivery === "manual" && (
         <div className="grid gap-5 md:grid-cols-2">
-          <Field label="Stock" htmlFor="manualStock" hint="Leave empty for unlimited. Decreases by 1 per paid order.">
+          <Field
+            label="Stock"
+            htmlFor="manualStock"
+            hint={hasOptions ? "Set per option above." : "Leave empty for unlimited. Decreases by 1 per paid order."}
+          >
             <Input
               id="manualStock"
               name="manualStock"
               type="number"
               min={0}
+              disabled={hasOptions}
               defaultValue={product?.manualStock ?? ""}
               className="h-10 rounded-xl"
             />
           </Field>
+
           <fieldset>
             <legend className="mb-2 text-sm font-medium">Preferred contact channels</legend>
             <div className="flex flex-wrap gap-x-5 gap-y-2">

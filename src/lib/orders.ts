@@ -7,8 +7,18 @@ import { db, schema } from "@/lib/db";
 import { sendEmail } from "@/lib/email";
 import { orderDeliveredEmail, orderPaidEmail, type EmailOrder } from "@/lib/email-templates";
 
-const { orders, orderItems, products, productCodes, users, fulfillmentDetails, stripeEvents, categories, coupons } =
-  schema;
+const {
+  orders,
+  orderItems,
+  products,
+  productVariants,
+  productCodes,
+  users,
+  fulfillmentDetails,
+  stripeEvents,
+  categories,
+  coupons,
+} = schema;
 
 type Db = ReturnType<typeof db>;
 type Tx = Parameters<Parameters<Db["transaction"]>[0]>[0];
@@ -38,7 +48,12 @@ export async function applyStripeEvent<T>(
  */
 async function assignCodes(tx: Tx, orderId: number): Promise<boolean> {
   const lines = await tx
-    .select({ id: orderItems.id, productId: orderItems.productId, quantity: orderItems.quantity })
+    .select({
+      id: orderItems.id,
+      productId: orderItems.productId,
+      variantId: orderItems.variantId,
+      quantity: orderItems.quantity,
+    })
     .from(orderItems)
     .innerJoin(products, eq(orderItems.productId, products.id))
     .where(and(eq(orderItems.orderId, orderId), eq(products.deliveryType, "automatic")));
@@ -53,10 +68,17 @@ async function assignCodes(tx: Tx, orderId: number): Promise<boolean> {
     const missing = line.quantity - Number(have);
     if (missing <= 0) continue;
 
+    // A line for an option only takes that option's codes; a plain product only untagged ones.
     const free = await tx
       .select({ id: productCodes.id })
       .from(productCodes)
-      .where(and(eq(productCodes.productId, line.productId), isNull(productCodes.orderId)))
+      .where(
+        and(
+          eq(productCodes.productId, line.productId),
+          line.variantId ? eq(productCodes.variantId, line.variantId) : isNull(productCodes.variantId),
+          isNull(productCodes.orderId),
+        ),
+      )
       .orderBy(productCodes.id)
       .limit(missing)
       .for("update", { skipLocked: true });
@@ -86,7 +108,12 @@ export async function markOrderPaid(
   if (!order || order.status !== "pending") return null;
 
   const lines = await tx
-    .select({ productId: orderItems.productId, quantity: orderItems.quantity, deliveryType: products.deliveryType })
+    .select({
+      productId: orderItems.productId,
+      variantId: orderItems.variantId,
+      quantity: orderItems.quantity,
+      deliveryType: products.deliveryType,
+    })
     .from(orderItems)
     .innerJoin(products, eq(orderItems.productId, products.id))
     .where(eq(orderItems.orderId, orderId));
@@ -94,10 +121,17 @@ export async function markOrderPaid(
   const codesComplete = await assignCodes(tx, orderId);
 
   for (const line of lines.filter((l) => l.deliveryType === "manual")) {
-    await tx
-      .update(products)
-      .set({ manualStock: sql`greatest(${products.manualStock} - ${line.quantity}, 0)` })
-      .where(and(eq(products.id, line.productId), sql`${products.manualStock} is not null`));
+    if (line.variantId) {
+      await tx
+        .update(productVariants)
+        .set({ manualStock: sql`greatest(${productVariants.manualStock} - ${line.quantity}, 0)` })
+        .where(and(eq(productVariants.id, line.variantId), sql`${productVariants.manualStock} is not null`));
+    } else {
+      await tx
+        .update(products)
+        .set({ manualStock: sql`greatest(${products.manualStock} - ${line.quantity}, 0)` })
+        .where(and(eq(products.id, line.productId), sql`${products.manualStock} is not null`));
+    }
   }
 
   if (order.couponId) {
@@ -170,6 +204,12 @@ const name = (locale: Locale) =>
     ? sql<string>`coalesce(${products.nameEn}, ${products.name}, ${orderItems.productName})`
     : sql<string>`coalesce(${products.name}, ${orderItems.productName})`;
 
+/** The option bought, live name first, then the snapshot taken at checkout. */
+const variantName = (locale: Locale) =>
+  locale === "en"
+    ? sql<string | null>`coalesce(${productVariants.nameEn}, ${productVariants.name}, ${orderItems.variantName})`
+    : sql<string | null>`coalesce(${productVariants.name}, ${orderItems.variantName})`;
+
 /** Lines of one or more orders with their assigned codes, in the given language. */
 async function loadItems(orderIds: number[], locale: Locale) {
   if (!orderIds.length) return [];
@@ -179,9 +219,11 @@ async function loadItems(orderIds: number[], locale: Locale) {
         id: orderItems.id,
         orderId: orderItems.orderId,
         productId: orderItems.productId,
+        variantId: orderItems.variantId,
         quantity: orderItems.quantity,
         unitPriceMinor: orderItems.unitPriceMinor,
-        name: name(locale),
+        productName: name(locale),
+        variantName: variantName(locale),
         slug: products.slug,
         deliveryType: products.deliveryType,
         instructions:
@@ -195,6 +237,7 @@ async function loadItems(orderIds: number[], locale: Locale) {
       .from(orderItems)
       .innerJoin(products, eq(orderItems.productId, products.id))
       .innerJoin(categories, eq(products.categoryId, categories.id))
+      .leftJoin(productVariants, eq(orderItems.variantId, productVariants.id))
       .where(inArray(orderItems.orderId, orderIds))
       .orderBy(orderItems.id),
     db()
@@ -205,8 +248,11 @@ async function loadItems(orderIds: number[], locale: Locale) {
   ]);
   return lines.map((l) => ({
     ...l,
+    /** Product name with the chosen option, e.g. "GTA 6 — Ultimate". */
+    name: l.variantName ? `${l.productName} — ${l.variantName}` : l.productName,
     codes: codes.filter((c) => c.orderItemId === l.id).map((c) => c.code),
   }));
+
 }
 
 export type OrderLine = Awaited<ReturnType<typeof loadItems>>[number];

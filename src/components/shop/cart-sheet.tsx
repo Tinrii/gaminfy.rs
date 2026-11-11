@@ -22,6 +22,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { useI18n } from "@/i18n/client";
 import { plural, t } from "@/i18n/dictionaries";
 import type { CartQuote } from "@/lib/cart";
+import { cartKey } from "@/lib/cart-key";
 import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useCart } from "./cart-context";
@@ -80,8 +81,8 @@ export function CartSheet() {
       .then((q) => {
         if (id !== requestId.current) return;
         setResult({ key, quote: q });
-        if (q.removedIds.length) {
-          cart.removeMany(q.removedIds);
+        if (q.removedKeys.length) {
+          cart.removeMany(q.removedKeys);
           setRemovedNotice(true);
         }
         if (q.couponError) {
@@ -110,8 +111,8 @@ export function CartSheet() {
     cart.setOpen(next);
   };
 
-  const lineFor = (productId: number) => quote?.lines.find((l) => l.productId === productId);
-  const shownItems = items.filter((i) => lineFor(i.productId));
+  const lineFor = (key: string) => quote?.lines.find((l) => l.key === key);
+  const shownItems = items.filter((i) => lineFor(cartKey(i.productId, i.variantId)));
   const blocked = !quote || quote.lines.some((l) => l.maxQuantity === 0 || l.quantity > l.maxQuantity);
 
   const applyCoupon = (e: React.FormEvent) => {
@@ -175,17 +176,18 @@ export function CartSheet() {
               {!quote ? (
                 <ul className="space-y-3" aria-busy>
                   {items.map((i) => (
-                    <li key={i.productId} className="h-20 animate-pulse rounded-2xl bg-card" />
+                    <li key={cartKey(i.productId, i.variantId)} className="h-20 animate-pulse rounded-2xl bg-card" />
                   ))}
                 </ul>
               ) : (
                 <ul className="space-y-3">
                   {shownItems.map((item) => {
-                    const line = lineFor(item.productId)!;
+                    const key = cartKey(item.productId, item.variantId);
+                    const line = lineFor(key)!;
                     const soldOut = line.maxQuantity === 0;
                     const max = Math.max(1, line.maxQuantity);
                     return (
-                      <li key={item.productId} className="flex gap-3 rounded-2xl border border-white/[0.06] bg-card p-3">
+                      <li key={key} className="flex gap-3 rounded-2xl border border-white/[0.06] bg-card p-3">
                         <Link
                           href={href(`/product/${line.slug}`)}
                           onClick={() => setOpen(false)}
@@ -212,10 +214,11 @@ export function CartSheet() {
                               >
                                 {line.name}
                               </Link>
+                              {line.variantName && <p className="text-xs text-muted-foreground">{line.variantName}</p>}
                             </div>
                             <button
                               type="button"
-                              onClick={() => cart.remove(item.productId)}
+                              onClick={() => cart.remove(key)}
                               aria-label={`${c.remove}: ${line.name}`}
                               className="-mt-1 -mr-1 grid size-8 shrink-0 place-items-center rounded-lg text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
                             >
@@ -229,7 +232,7 @@ export function CartSheet() {
                               <div className="flex items-center rounded-lg border border-white/10">
                                 <button
                                   type="button"
-                                  onClick={() => cart.setQuantity(item.productId, item.quantity - 1)}
+                                  onClick={() => cart.setQuantity(key, item.quantity - 1)}
                                   disabled={item.quantity <= 1}
                                   aria-label={c.decrease}
                                   className="grid size-7 place-items-center text-muted-foreground hover:text-foreground disabled:opacity-40"
@@ -239,7 +242,8 @@ export function CartSheet() {
                                 <span className="w-7 text-center text-sm font-semibold tabular-nums">{line.quantity}</span>
                                 <button
                                   type="button"
-                                  onClick={() => cart.setQuantity(item.productId, item.quantity + 1)}
+                                  onClick={() => cart.setQuantity(key, item.quantity + 1)}
+
                                   disabled={item.quantity >= max}
                                   aria-label={c.increase}
                                   title={item.quantity >= max ? t(c.maxQuantity, { n: max }) : undefined}

@@ -1,8 +1,10 @@
 "use client";
 
 import { createContext, use, useMemo, useState, useSyncExternalStore } from "react";
+import { cartKey } from "@/lib/cart-key";
 
-export type CartItem = { productId: number; quantity: number };
+/** variantId is set for products sold through options (e.g. Standard / Ultimate). */
+export type CartItem = { productId: number; variantId: number | null; quantity: number };
 type Stored = { items: CartItem[]; couponCode: string | null };
 
 const STORAGE_KEY = "gaminfy_cart";
@@ -14,7 +16,10 @@ function read(): Stored {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as Stored | null;
     if (!parsed || !Array.isArray(parsed.items)) return EMPTY;
     return {
-      items: parsed.items.filter((i) => Number.isInteger(i.productId) && i.quantity > 0),
+      // Carts saved before options existed have no variantId.
+      items: parsed.items
+        .filter((i) => Number.isInteger(i.productId) && i.quantity > 0)
+        .map((i) => ({ ...i, variantId: Number.isInteger(i.variantId) ? i.variantId : null })),
       couponCode: typeof parsed.couponCode === "string" ? parsed.couponCode : null,
     };
   } catch {
@@ -65,15 +70,18 @@ type CartValue = {
   count: number;
   open: boolean;
   setOpen: (open: boolean) => void;
-  add: (productId: number, quantity?: number) => void;
-  setQuantity: (productId: number, quantity: number) => void;
-  remove: (productId: number) => void;
-  removeMany: (productIds: number[]) => void;
+  add: (productId: number, quantity?: number, variantId?: number | null) => void;
+  /** The line methods take cartKey(productId, variantId). */
+  setQuantity: (key: string, quantity: number) => void;
+  remove: (key: string) => void;
+  removeMany: (keys: string[]) => void;
   setCouponCode: (code: string | null) => void;
   clear: () => void;
 };
 
 const CartContext = createContext<CartValue | null>(null);
+
+const keyOf = (i: CartItem) => cartKey(i.productId, i.variantId);
 
 /**
  * Cart kept in localStorage so it survives reloads and works before sign-in.
@@ -91,26 +99,28 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       count: state.items.reduce((sum, i) => sum + i.quantity, 0),
       open,
       setOpen,
-      add: (productId, quantity = 1) =>
+      add: (productId, quantity = 1, variantId = null) =>
         update((prev) => {
-          const existing = prev.items.find((i) => i.productId === productId);
+          const key = cartKey(productId, variantId);
+          const existing = prev.items.find((i) => keyOf(i) === key);
           const items = existing
             ? prev.items.map((i) =>
-                i.productId === productId ? { ...i, quantity: Math.min(i.quantity + quantity, MAX_QUANTITY) } : i,
+                keyOf(i) === key ? { ...i, quantity: Math.min(i.quantity + quantity, MAX_QUANTITY) } : i,
               )
-            : [...prev.items, { productId, quantity: Math.min(quantity, MAX_QUANTITY) }];
+            : [...prev.items, { productId, variantId, quantity: Math.min(quantity, MAX_QUANTITY) }];
           return { ...prev, items };
         }),
-      setQuantity: (productId, quantity) =>
+      setQuantity: (key, quantity) =>
         update((prev) => ({
           ...prev,
           items:
             quantity <= 0
-              ? prev.items.filter((i) => i.productId !== productId)
-              : prev.items.map((i) => (i.productId === productId ? { ...i, quantity: Math.min(quantity, MAX_QUANTITY) } : i)),
+              ? prev.items.filter((i) => keyOf(i) !== key)
+              : prev.items.map((i) => (keyOf(i) === key ? { ...i, quantity: Math.min(quantity, MAX_QUANTITY) } : i)),
         })),
-      remove: (productId) => update((prev) => ({ ...prev, items: prev.items.filter((i) => i.productId !== productId) })),
-      removeMany: (ids) => update((prev) => ({ ...prev, items: prev.items.filter((i) => !ids.includes(i.productId)) })),
+      remove: (key) => update((prev) => ({ ...prev, items: prev.items.filter((i) => keyOf(i) !== key) })),
+      removeMany: (keys) => update((prev) => ({ ...prev, items: prev.items.filter((i) => !keys.includes(keyOf(i))) })),
+
       setCouponCode: (couponCode) => update((prev) => ({ ...prev, couponCode })),
       clear: () => update(() => EMPTY),
     }),

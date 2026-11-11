@@ -21,7 +21,7 @@ export type CheckoutState = { error?: keyof Dictionary["checkout"] };
 const SITE = () => process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
 export type CheckoutInput = {
-  items: { productId: number; quantity: number }[];
+  items: { productId: number; variantId?: number | null; quantity: number }[];
   couponCode?: string | null;
   locale: string;
   /** Checkout without an account: confirmation, codes and the order link go here. */
@@ -51,7 +51,7 @@ export async function startCheckout(input: CheckoutInput): Promise<CheckoutState
 
   const quote = await quoteCart(input.items, locale, input.couponCode);
   if (quote.lines.length === 0) return { error: "empty" };
-  if (quote.removedIds.length) return { error: "unavailable" };
+  if (quote.removedKeys.length) return { error: "unavailable" };
   if (quote.lines.some((l) => l.maxQuantity === 0 || l.quantity > l.maxQuantity)) return { error: "outOfStock" };
   if (input.couponCode?.trim() && !quote.coupon) return { error: "coupon" };
   if (quote.totalMinor <= 0) return { error: "failed" };
@@ -82,6 +82,8 @@ export async function startCheckout(input: CheckoutInput): Promise<CheckoutState
         orderId: res.insertId,
         productId: l.productId,
         productName: l.nameSr,
+        variantId: l.variantId,
+        variantName: l.variantNameSr,
         quantity: l.quantity,
         unitPriceMinor: l.unitPriceMinor,
       })),
@@ -111,7 +113,8 @@ export async function startCheckout(input: CheckoutInput): Promise<CheckoutState
           currency: l.currency.toLowerCase(),
           unit_amount: l.unitPriceMinor,
           product_data: {
-            name: l.name,
+            name: l.variantName ? `${l.name} — ${l.variantName}` : l.name,
+
             ...(l.imageUrl ? { images: [absoluteAsset(l.imageUrl)] } : {}),
           },
         },

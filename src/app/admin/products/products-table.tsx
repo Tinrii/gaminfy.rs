@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import type { AdminProductRow } from "@/lib/admin-data";
+import { formatPrice } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { addCodes, toggleProductActive, updateProductPrice, type AdminState } from "../actions";
 import { SubmitButton } from "../ui";
@@ -157,15 +158,35 @@ function Row({ row, onAddKeys }: { row: AdminProductRow; onAddKeys: () => void }
         )}
       </td>
       <td className="px-3 py-3">
-        <PriceCell id={row.id} priceMinor={row.priceMinor} />
+        {row.variantCount > 0 ? (
+          // Option prices are edited on the product page.
+          <Link href={`/admin/products/${row.id}`} className="block text-sm hover:text-primary">
+            <span className="text-muted-foreground">from </span>
+            <span className="tabular-nums">{formatPrice(row.priceMinor, row.currency)}</span>
+            <span className="block text-xs text-muted-foreground">
+              {row.variantCount} option{row.variantCount === 1 ? "" : "s"}
+            </span>
+          </Link>
+        ) : (
+          <PriceCell id={row.id} priceMinor={row.priceMinor} />
+        )}
       </td>
       <td className="py-3 pr-4 pl-3">
         <div className="flex items-center justify-end gap-1.5">
-          {automatic && (
-            <Button type="button" variant="secondary" size="sm" className="h-8 rounded-lg" onClick={onAddKeys}>
-              <KeyRoundIcon /> Add keys
-            </Button>
-          )}
+          {automatic &&
+            (row.variantCount > 0 ? (
+              // Keys are added per option, on the product page.
+              <Button asChild variant="secondary" size="sm" className="h-8 rounded-lg">
+                <Link href={`/admin/products/${row.id}#codes`}>
+                  <KeyRoundIcon /> Add keys
+                </Link>
+              </Button>
+            ) : (
+              <Button type="button" variant="secondary" size="sm" className="h-8 rounded-lg" onClick={onAddKeys}>
+                <KeyRoundIcon /> Add keys
+              </Button>
+            ))}
+
           <form action={toggleProductActive}>
             <input type="hidden" name="id" value={row.id} />
             <Button

@@ -122,6 +122,9 @@ const sr = {
     instantDelivery: "Instant isporuka koda",
     teamDelivery: "Isporučuje naš tim",
     price: "Cena",
+    /** Before the cheapest option's price on cards, e.g. "od 4.990 RSD". */
+    from: "od",
+    chooseOption: "Izaberi opciju",
     buyNow: "Kupi odmah",
     officialPrice: "Zvanična cena u prodavnici igre",
     youSave: "Štediš {amount} kod nas",
@@ -637,6 +640,8 @@ const en: Dictionary = {
     instantDelivery: "Instant code delivery",
     teamDelivery: "Delivered by our team",
     price: "Price",
+    from: "from",
+    chooseOption: "Choose an option",
     buyNow: "Buy now",
     officialPrice: "Official in-game store price",
     youSave: "You save {amount} with us",

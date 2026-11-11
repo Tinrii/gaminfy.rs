@@ -1,23 +1,30 @@
 import "server-only";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { Locale } from "@/i18n/config";
-import { AVAILABLE_CODES_SQL, productGroupName } from "@/lib/catalog";
+import { cartKey } from "@/lib/cart-key";
+import { PLAIN_CODES_SQL, VARIANT_CODES_SQL, productGroupName } from "@/lib/catalog";
 import { validateCoupon, type CouponError } from "@/lib/coupons";
 import { db, schema } from "@/lib/db";
 
-const { products, categories } = schema;
+const { products, productVariants, categories } = schema;
 
 /** Most units of one product in a single order. */
 export const MAX_QUANTITY = 10;
 
-export type CartInputItem = { productId: number; quantity: number };
+export type CartInputItem = { productId: number; variantId: number | null; quantity: number };
 
 export type CartLine = {
+  /** cartKey(productId, variantId) — how the client cart identifies this line. */
+  key: string;
   productId: number;
+  variantId: number | null;
   slug: string;
   name: string;
   /** Untranslated name, stored on the order as a snapshot. */
   nameSr: string;
+  /** Chosen option (products with options only), translated and as the Serbian snapshot. */
+  variantName: string | null;
+  variantNameSr: string | null;
   categoryName: string;
   imageUrl: string | null;
   deliveryType: "automatic" | "manual";
@@ -33,8 +40,8 @@ export type CartLine = {
 
 export type CartQuote = {
   lines: CartLine[];
-  /** Products in the cart that no longer exist or are hidden. */
-  removedIds: number[];
+  /** Cart keys of products or options that no longer exist or are hidden. */
+  removedKeys: string[];
   currency: string;
   subtotalMinor: number;
   discountMinor: number;
@@ -49,14 +56,19 @@ export type CartQuote = {
 /** Merges duplicate lines and drops anything malformed. */
 export function normalizeItems(items: unknown): CartInputItem[] {
   if (!Array.isArray(items)) return [];
-  const merged = new Map<number, number>();
+  const merged = new Map<string, CartInputItem>();
   for (const raw of items.slice(0, 50)) {
     const productId = Number((raw as CartInputItem)?.productId);
+    const rawVariant = (raw as CartInputItem)?.variantId;
+    const variantId = rawVariant == null ? null : Number(rawVariant);
     const quantity = Math.floor(Number((raw as CartInputItem)?.quantity));
     if (!Number.isInteger(productId) || productId <= 0 || !Number.isFinite(quantity) || quantity <= 0) continue;
-    merged.set(productId, Math.min((merged.get(productId) ?? 0) + quantity, MAX_QUANTITY));
+    if (variantId !== null && (!Number.isInteger(variantId) || variantId <= 0)) continue;
+    const key = cartKey(productId, variantId);
+    const prev = merged.get(key)?.quantity ?? 0;
+    merged.set(key, { productId, variantId, quantity: Math.min(prev + quantity, MAX_QUANTITY) });
   }
-  return [...merged].map(([productId, quantity]) => ({ productId, quantity }));
+  return [...merged.values()];
 }
 
 /**
@@ -65,7 +77,7 @@ export function normalizeItems(items: unknown): CartInputItem[] {
  */
 export async function quoteCart(rawItems: unknown, locale: Locale, couponCode?: string | null): Promise<CartQuote> {
   const items = normalizeItems(rawItems);
-  const ids = items.map((i) => i.productId);
+  const ids = [...new Set(items.map((i) => i.productId))];
 
   const rows = ids.length
     ? await db()
@@ -81,40 +93,66 @@ export async function quoteCart(rawItems: unknown, locale: Locale, couponCode?: 
           officialPriceMinor: products.officialPriceMinor,
           currency: products.currency,
           manualStock: products.manualStock,
-          codes: sql<number>`${AVAILABLE_CODES_SQL}`,
+          codes: sql<number>`${PLAIN_CODES_SQL}`,
         })
         .from(products)
         .innerJoin(categories, eq(products.categoryId, categories.id))
         .where(and(inArray(products.id, ids), eq(products.isActive, true), eq(categories.isActive, true)))
     : [];
 
+  // Active options of those products — a product with any must be bought through one.
+  const variantRows = rows.length
+    ? await db()
+        .select({
+          id: productVariants.id,
+          productId: productVariants.productId,
+          name: productVariants.name,
+          nameEn: productVariants.nameEn,
+          priceMinor: productVariants.priceMinor,
+          officialPriceMinor: productVariants.officialPriceMinor,
+          manualStock: productVariants.manualStock,
+          codes: sql<number>`${VARIANT_CODES_SQL}`,
+        })
+        .from(productVariants)
+        .where(and(inArray(productVariants.productId, rows.map((r) => r.id)), eq(productVariants.isActive, true)))
+    : [];
+
   const byId = new Map(rows.map((r) => [r.id, r]));
   const lines: CartLine[] = [];
-  const removedIds: number[] = [];
+  const removedKeys: string[] = [];
 
   for (const item of items) {
+    const key = cartKey(item.productId, item.variantId);
     const p = byId.get(item.productId);
-    if (!p) {
-      removedIds.push(item.productId);
+    const options = variantRows.filter((v) => v.productId === item.productId);
+    const v = item.variantId === null ? undefined : options.find((o) => o.id === item.variantId);
+    // Gone, hidden, or the option no longer matches how the product is sold.
+    if (!p || (options.length > 0 ? !v : item.variantId !== null)) {
+      removedKeys.push(key);
       continue;
     }
-    const stock = p.deliveryType === "automatic" ? Number(p.codes) : p.manualStock;
+    const source = v ?? p;
+    const stock = p.deliveryType === "automatic" ? Number(source.codes) : source.manualStock;
     const maxQuantity = stock === null ? MAX_QUANTITY : Math.max(0, Math.min(stock, MAX_QUANTITY));
     const quantity = maxQuantity === 0 ? item.quantity : Math.min(item.quantity, maxQuantity);
     lines.push({
+      key,
       productId: p.id,
+      variantId: v?.id ?? null,
       slug: p.slug,
       name: locale === "en" ? (p.nameEn ?? p.name) : p.name,
       nameSr: p.name,
+      variantName: v ? (locale === "en" ? (v.nameEn ?? v.name) : v.name) : null,
+      variantNameSr: v?.name ?? null,
       categoryName: p.categoryName,
       imageUrl: p.imageUrl,
       deliveryType: p.deliveryType,
-      unitPriceMinor: p.priceMinor,
-      officialPriceMinor: p.officialPriceMinor,
+      unitPriceMinor: source.priceMinor,
+      officialPriceMinor: source.officialPriceMinor,
       currency: p.currency,
       quantity,
       maxQuantity,
-      lineTotalMinor: maxQuantity === 0 ? 0 : p.priceMinor * quantity,
+      lineTotalMinor: maxQuantity === 0 ? 0 : source.priceMinor * quantity,
     });
   }
 
@@ -144,7 +182,8 @@ export async function quoteCart(rawItems: unknown, locale: Locale, couponCode?: 
 
   return {
     lines,
-    removedIds,
+    removedKeys,
+
     currency: lines[0]?.currency ?? "RSD",
     subtotalMinor,
     discountMinor,

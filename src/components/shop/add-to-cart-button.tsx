@@ -11,6 +11,7 @@ import { useCart } from "./cart-context";
 /** Adds a product to the cart with a short "added" confirmation and a toast to open the cart. */
 export function AddToCartButton({
   productId,
+  variantId = null,
   productName,
   quantity = 1,
   disabled,
@@ -18,6 +19,8 @@ export function AddToCartButton({
   className,
 }: {
   productId: number;
+  /** The chosen option, for products sold through options. */
+  variantId?: number | null;
   productName: string;
   quantity?: number;
   disabled?: boolean;
@@ -32,7 +35,8 @@ export function AddToCartButton({
   const onClick = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    add(productId, quantity);
+    add(productId, quantity, variantId);
+
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 1400);
     toast.success(dict.cart.added, {

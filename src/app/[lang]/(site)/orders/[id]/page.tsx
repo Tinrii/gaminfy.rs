@@ -13,6 +13,7 @@ import { isAdmin } from "@/lib/auth";
 import { CONTACT_FIELD_KEYS, formatDateTime, parseContactFields } from "@/lib/format";
 import { canAccessOrder, getOrderDetail } from "@/lib/orders";
 import { cn } from "@/lib/utils";
+import { cartKey } from "@/lib/cart-key";
 import { ClearPurchasedFromCart } from "./clear-cart";
 import { CopyCode } from "./copy-code";
 import { FulfillmentForm } from "./fulfillment-form";
@@ -98,7 +99,7 @@ async function OrderView({ params, searchParams }: Pick<PageProps<"/[lang]/order
               </p>
             )}
             <Suspense>
-              <ClearPurchasedFromCart productIds={items.map((i) => i.productId)} usedCoupon={!!order.couponCode} />
+              <ClearPurchasedFromCart cartKeys={items.map((i) => cartKey(i.productId, i.variantId))} usedCoupon={!!order.couponCode} />
             </Suspense>
 
             <ol className="mt-8 grid gap-4 sm:grid-cols-4" aria-label={o.progress}>

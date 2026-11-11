@@ -38,7 +38,7 @@ export async function generateMetadata({ params }: PageProps<"/[lang]/product/[s
   if (!product) return { title: dict.product.notFound, robots: { index: false } };
   return pageMetadata({
     title: product.name,
-    description: `${product.description ?? product.name} ${dict.product.price}: ${formatPrice(product.priceMinor, product.currency, locale)}.`,
+    description: `${product.description ?? product.name} ${dict.product.price}: ${product.variants.length ? `${dict.product.from} ` : ""}${formatPrice(product.priceMinor, product.currency, locale)}.`,
     path: `/product/${product.slug}`,
     image: false,
   });
@@ -88,6 +88,8 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
   // CS2 skins get the CS2 page's gold theme and are shown whole (wide weapon renders).
   const skin = product.categorySlug === CS2_CATEGORY;
   const productUrl = absoluteUrl(locale, `/product/${product.slug}`);
+  const availability = product.inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock";
+  const optionPrices = product.variants.map((v) => v.priceMinor);
 
   return (
     <div className="pt-[4.5rem]" data-theme={skin ? "gold" : undefined}>
@@ -103,15 +105,27 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
             category: product.categoryName,
             brand: { "@type": "Brand", name: groupName },
             url: productUrl,
-            offers: {
-              "@type": "Offer",
-              url: productUrl,
-              price: (product.priceMinor / 100).toFixed(2),
-              priceCurrency: product.currency,
-              availability: product.inStock ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
-              itemCondition: "https://schema.org/NewCondition",
-              seller: { "@id": `${siteUrl()}/#organization` },
-            },
+            offers: optionPrices.length
+              ? {
+                  "@type": "AggregateOffer",
+                  url: productUrl,
+                  lowPrice: (Math.min(...optionPrices) / 100).toFixed(2),
+                  highPrice: (Math.max(...optionPrices) / 100).toFixed(2),
+                  offerCount: optionPrices.length,
+                  priceCurrency: product.currency,
+                  availability,
+                  itemCondition: "https://schema.org/NewCondition",
+                  seller: { "@id": `${siteUrl()}/#organization` },
+                }
+              : {
+                  "@type": "Offer",
+                  url: productUrl,
+                  price: (product.priceMinor / 100).toFixed(2),
+                  priceCurrency: product.currency,
+                  availability,
+                  itemCondition: "https://schema.org/NewCondition",
+                  seller: { "@id": `${siteUrl()}/#organization` },
+                },
           },
           breadcrumbLd([
             { name: dict.nav.marketplace, url: absoluteUrl(locale, "/marketplace") },
@@ -187,7 +201,17 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
               </span>
             </div>
 
-            <BuyBox productId={product.id} productName={product.name} priceMinor={product.priceMinor} officialPriceMinor={product.officialPriceMinor} officialPriceLabel={skin ? dict.cs2.marketPrice : undefined} currency={product.currency} inStock={product.inStock} />
+            <BuyBox
+              productId={product.id}
+              productName={product.name}
+              priceMinor={product.priceMinor}
+              officialPriceMinor={product.officialPriceMinor}
+              officialPriceLabel={skin ? dict.cs2.marketPrice : undefined}
+              currency={product.currency}
+              inStock={product.inStock}
+              variants={product.variants}
+            />
+
 
             <p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
               <ShieldCheckIcon className="size-4 text-primary" />
@@ -257,7 +281,13 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
               </div>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
                 {related.map((p) => (
-                  <ProductCard key={p.id} product={p} skin={skin} officialPriceLabel={skin ? dict.cs2.marketPrice : undefined} />
+                  <ProductCard
+                    key={p.id}
+                    product={p}
+                    skin={skin}
+                    fitImage
+                    officialPriceLabel={skin ? dict.cs2.marketPrice : undefined}
+                  />
                 ))}
               </div>
             </section>

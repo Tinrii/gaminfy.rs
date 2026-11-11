@@ -41,9 +41,13 @@ async function EditProduct({ params }: Pick<PageProps<"/admin/products/[id]">, "
     listKnownImages(),
   ]);
   if (!data) notFound();
-  const { product, codes } = data;
+  const { product, codes, variants } = data;
   const available = codes.filter((c) => c.orderId === null);
   const used = codes.length - available.length;
+  const optionName = new Map(variants.map((v) => [v.id, v.name]));
+  // Codes of a removed option, or untagged codes on a product that now has options, are never handed out.
+  const unusable = (c: (typeof codes)[number]) =>
+    variants.length ? !c.variantId || !optionName.has(c.variantId) : c.variantId !== null;
 
   return (
     <>
@@ -66,19 +70,52 @@ async function EditProduct({ params }: Pick<PageProps<"/admin/products/[id]">, "
         </div>
       </div>
 
-      <ProductForm product={product} categories={cats.map((c) => c.category)} subcategories={subs} images={images} uploadsEnabled={uploadsEnabled()} />
+      <ProductForm
+        product={product}
+        variants={variants}
+        categories={cats.map((c) => c.category)}
+        subcategories={subs}
+        images={images}
+        uploadsEnabled={uploadsEnabled()}
+      />
 
       {product.deliveryType === "automatic" && (
         <section id="codes" className="scroll-mt-24 space-y-5 rounded-2xl border border-white/[0.06] bg-card p-6">
           <div>
             <h2 className="font-semibold">Code stock</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              {available.length} available · {used} assigned to orders. Each code is delivered to exactly one order.
+              {variants.length
+                ? variants
+                    .map((v) => `${v.name}: ${available.filter((c) => c.variantId === v.id).length} available`)
+                    .join(" · ")
+                : `${available.length} available`}{" "}
+              · {used} assigned to orders. Each code is delivered to exactly one order.
             </p>
           </div>
 
           <ActionForm action={addCodes} className="space-y-3">
             <input type="hidden" name="productId" value={product.id} />
+            {variants.length > 0 && (
+              <div className="space-y-2">
+                <Label htmlFor="variantId">Codes are for option</Label>
+                <select
+                  id="variantId"
+                  name="variantId"
+                  required
+                  defaultValue=""
+                  className="h-10 w-full max-w-xs rounded-xl border border-input bg-background px-3 text-sm"
+                >
+                  <option value="" disabled>
+                    Select…
+                  </option>
+                  {variants.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <Label htmlFor="codes">Add codes (one per line)</Label>
             <Textarea id="codes" name="codes" rows={5} placeholder={"XXXX-XXXX-XXXX\nYYYY-YYYY-YYYY"} className="rounded-xl font-mono text-sm" />
             <SubmitButton className="rounded-xl">Add codes</SubmitButton>
@@ -92,6 +129,18 @@ async function EditProduct({ params }: Pick<PageProps<"/admin/products/[id]">, "
                   <code className="min-w-0 flex-1 truncate font-mono text-xs">
                     {c.code.length > 6 ? `${c.code.slice(0, 4)}••••${c.code.slice(-2)}` : "••••"}
                   </code>
+                  {variants.length > 0 && c.variantId && optionName.has(c.variantId) && (
+                    <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs">{optionName.get(c.variantId)}</span>
+                  )}
+                  {!c.orderId && unusable(c) && (
+                    <span
+                      className="rounded-full bg-gold/10 px-2 py-0.5 text-xs text-gold"
+                      title="Not tied to a current option, so it won't be delivered. Remove it and add it again under an option."
+                    >
+                      No option
+                    </span>
+                  )}
+
                   <span className="text-xs text-muted-foreground">{formatDate(c.createdAt)}</span>
                   {c.orderId ? (
                     <Link href={`/admin/orders/${c.orderId}`} className="w-24 text-right text-xs text-primary hover:underline">

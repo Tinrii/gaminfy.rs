@@ -64,6 +64,13 @@
       "when": 1792626048847,
       "tag": "0008_cs2_category",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1794433029310,
+      "tag": "0009_product_variants",
+      "breakpoints": true
     }
   ]
 }

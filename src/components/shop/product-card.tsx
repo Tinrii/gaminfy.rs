@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { ZapIcon } from "lucide-react";
+import { ShoppingCartIcon, ZapIcon } from "lucide-react";
 import { useI18n } from "@/i18n/client";
 import type { ProductCard as ProductCardData } from "@/lib/catalog";
 import { cn } from "@/lib/utils";
@@ -91,7 +91,11 @@ export function ProductCard({
         </h3>
         <div className="mt-auto flex items-end justify-between gap-2 pt-1">
           <div className="min-w-0">
-            <Price minor={product.priceMinor} currency={product.currency} className="block text-base font-semibold text-primary" />
+            {/* With options, priceMinor is the cheapest option's price. */}
+            <span className="block text-base font-semibold text-primary">
+              {product.hasVariants && <span className="text-xs font-medium text-muted-foreground">{dict.product.from} </span>}
+              <Price minor={product.priceMinor} currency={product.currency} />
+            </span>
             <OfficialPrice
               priceMinor={product.priceMinor}
               officialPriceMinor={product.officialPriceMinor}
@@ -100,13 +104,30 @@ export function ProductCard({
               className="mt-0.5"
             />
           </div>
-          <AddToCartButton
-            productId={product.id}
-            productName={product.name}
-            disabled={!product.inStock}
-            variant="icon"
-            className="relative z-10 size-9"
-          />
+          {product.hasVariants ? (
+            // An option has to be picked first, so the cart button opens the product page.
+            <Link
+              href={href(`/product/${product.slug}`)}
+              aria-label={`${dict.product.chooseOption}: ${product.name}`}
+              title={dict.product.chooseOption}
+              aria-disabled={!product.inStock}
+              className={cn(
+                "relative z-10 grid size-9 place-items-center rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/20 transition-[transform,background-color] hover:scale-105 hover:bg-primary/90",
+                !product.inStock && "pointer-events-none bg-white/10 text-muted-foreground shadow-none",
+              )}
+            >
+              <ShoppingCartIcon className="size-4" />
+            </Link>
+          ) : (
+            <AddToCartButton
+              productId={product.id}
+              productName={product.name}
+              disabled={!product.inStock}
+              variant="icon"
+              className="relative z-10 size-9"
+            />
+          )}
+
         </div>
       </div>
     </div>

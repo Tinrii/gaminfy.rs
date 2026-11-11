@@ -186,7 +186,10 @@ export function CategorySearchInput({
           </span>
         </span>
         {o.kind === "product" ? (
-          <Price minor={o.product.priceMinor} currency={o.product.currency} className="shrink-0 text-xs font-semibold text-primary" />
+          <span className="shrink-0 text-xs font-semibold text-primary">
+            {o.product.hasVariants && <span className="font-normal text-muted-foreground">{dict.product.from} </span>}
+            <Price minor={o.product.priceMinor} currency={o.product.currency} />
+          </span>
         ) : (
           <ArrowRightIcon className={cn("size-4 shrink-0 text-primary transition-opacity", on ? "opacity-100" : "opacity-0")} />
         )}

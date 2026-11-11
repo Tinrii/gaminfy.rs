@@ -4,7 +4,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import type { Locale } from "@/i18n/config";
 import { db, schema } from "@/lib/db";
 
-const { categories, subcategories, products, orders } = schema;
+const { categories, subcategories, products, productVariants, orders } = schema;
 
 export const CATALOG_TAG = "catalog";
 export const PAGE_SIZE = 10;
@@ -16,11 +16,34 @@ export const PAGE_SIZE = 10;
 export const AVAILABLE_CODES_SQL = sql.raw(
   "(select count(*) from `product_codes` pc where pc.`product_id` = `products`.`id` and pc.`order_id` is null)",
 );
-const availableCodes = sql<number>`${AVAILABLE_CODES_SQL}`;
+/** Unassigned codes not tied to an option — the stock of a product sold without options. */
+export const PLAIN_CODES_SQL = sql.raw(
+  "(select count(*) from `product_codes` pc where pc.`product_id` = `products`.`id` and pc.`variant_id` is null and pc.`order_id` is null)",
+);
+const plainCodes = sql<number>`${PLAIN_CODES_SQL}`;
+
+/** Unassigned codes of one option (correlated to `product_variants`). */
+export const VARIANT_CODES_SQL = sql.raw(
+  "(select count(*) from `product_codes` pc where pc.`variant_id` = `product_variants`.`id` and pc.`order_id` is null)",
+);
+
+/** Products with at least one active option are bought through that option. */
+const hasVariantsExpr = sql<boolean>`${sql.raw(
+  "exists (select 1 from `product_variants` v where v.`product_id` = `products`.`id` and v.`is_active` = true)",
+)}`;
+
+/** Any active option still has stock: codes for automatic products, manual stock otherwise. */
+const variantInStockExpr = sql<boolean>`${sql.raw(
+  "exists (select 1 from `product_variants` v where v.`product_id` = `products`.`id` and v.`is_active` = true and (" +
+    "(`products`.`delivery_type` = 'automatic' and exists (select 1 from `product_codes` pc where pc.`variant_id` = v.`id` and pc.`order_id` is null))" +
+    " or (`products`.`delivery_type` = 'manual' and (v.`manual_stock` is null or v.`manual_stock` > 0))))",
+)}`;
 
 const inStockExpr = sql<boolean>`(
-  (${products.deliveryType} = 'automatic' and ${availableCodes} > 0)
-  or (${products.deliveryType} = 'manual' and (${products.manualStock} is null or ${products.manualStock} > 0))
+  case when ${hasVariantsExpr} then ${variantInStockExpr} else (
+    (${products.deliveryType} = 'automatic' and ${plainCodes} > 0)
+    or (${products.deliveryType} = 'manual' and (${products.manualStock} is null or ${products.manualStock} > 0))
+  ) end
 )`;
 
 /** English falls back to the Serbian copy when a translation is missing. */
@@ -59,6 +82,7 @@ const productCard = (locale: Locale) => ({
   subcategorySlug,
   subcategoryName: subcategoryName(locale),
   inStock: inStockExpr,
+  hasVariants: hasVariantsExpr,
 });
 
 export type ProductCard = {
@@ -76,11 +100,16 @@ export type ProductCard = {
   subcategorySlug: string | null;
   subcategoryName: string | null;
   inStock: boolean;
+  /** Sold through options (e.g. Standard / Ultimate): priceMinor is the cheapest one's, shown as "from". */
+  hasVariants: boolean;
 };
 
-const toCard = (row: Omit<ProductCard, "inStock"> & { inStock: unknown }): ProductCard => ({
+const toCard = (
+  row: Omit<ProductCard, "inStock" | "hasVariants"> & { inStock: unknown; hasVariants: unknown },
+): ProductCard => ({
   ...row,
   inStock: Boolean(Number(row.inStock)),
+  hasVariants: Boolean(Number(row.hasVariants)),
 });
 
 export type CategoryWithCount = {
@@ -270,13 +299,25 @@ export async function getProducts(query: ProductQuery): Promise<{ items: Product
   return { items: rows.map(toCard), total: Number(total) };
 }
 
+export type ProductVariantOption = {
+  id: number;
+  name: string;
+  priceMinor: number;
+  officialPriceMinor: number | null;
+  /** Units left: codes for automatic, manual stock (null = unlimited) for manual. */
+  stock: number | null;
+  inStock: boolean;
+};
+
 export type ProductDetail = ProductCard & {
   description: string | null;
   instructions: string | null;
   categoryId: number;
   requiredContactFields: string | null;
-  /** Units left: codes for automatic, manual stock (null = unlimited) for manual. */
+  /** Units left: codes for automatic, manual stock (null = unlimited) for manual. Null with options (see `variants`). */
   stock: number | null;
+  /** Active options in admin order; empty when the product is sold as itself. */
+  variants: ProductVariantOption[];
 };
 
 export async function getProduct(slug: string, locale: Locale): Promise<ProductDetail | null> {
@@ -292,7 +333,7 @@ export async function getProduct(slug: string, locale: Locale): Promise<ProductD
       categoryId: products.categoryId,
       requiredContactFields: products.requiredContactFields,
       manualStock: products.manualStock,
-      codes: availableCodes,
+      codes: plainCodes,
     })
     .from(products)
     .innerJoin(categories, eq(products.categoryId, categories.id))
@@ -301,14 +342,42 @@ export async function getProduct(slug: string, locale: Locale): Promise<ProductD
 
   if (!row) return null;
   const { manualStock, codes, ...rest } = row;
+  const card = toCard(rest);
+  const variants = card.hasVariants ? await getVariantOptions(card.id, card.deliveryType, locale) : [];
   return {
-    ...toCard(rest),
+    ...card,
     description: rest.description,
     instructions: rest.instructions,
     categoryId: rest.categoryId,
     requiredContactFields: rest.requiredContactFields,
-    stock: rest.deliveryType === "automatic" ? Number(codes) : manualStock,
+    stock: variants.length ? null : rest.deliveryType === "automatic" ? Number(codes) : manualStock,
+    variants,
   };
+}
+
+/** A product's active options with live stock, in admin sort order. */
+export async function getVariantOptions(
+  productId: number,
+  deliveryType: "automatic" | "manual",
+  locale: Locale,
+): Promise<ProductVariantOption[]> {
+  const rows = await db()
+    .select({
+      id: productVariants.id,
+      name: tr<string>(productVariants.name, productVariants.nameEn, locale),
+      priceMinor: productVariants.priceMinor,
+      officialPriceMinor: productVariants.officialPriceMinor,
+      manualStock: productVariants.manualStock,
+      codes: sql<number>`${VARIANT_CODES_SQL}`,
+    })
+    .from(productVariants)
+    .where(and(eq(productVariants.productId, productId), eq(productVariants.isActive, true)))
+    .orderBy(asc(productVariants.sortOrder), asc(productVariants.id));
+
+  return rows.map(({ manualStock, codes, ...v }) => {
+    const stock = deliveryType === "automatic" ? Number(codes) : manualStock;
+    return { ...v, stock, inStock: stock === null || stock > 0 };
+  });
 }
 
 export async function getProductSlugs(): Promise<string[]> {

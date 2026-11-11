@@ -108,6 +108,32 @@ export const products = mysqlTable(
   (t) => [index("products_category_idx").on(t.categoryId)],
 );
 
+/**
+ * Options a customer picks on the product page (e.g. GTA 6 Standard / Ultimate), each
+ * with its own price and stock. A product with no active options is sold as itself;
+ * with options, products.priceMinor mirrors the cheapest one so listings show "from".
+ */
+export const productVariants = mysqlTable(
+  "product_variants",
+  {
+    id: id(),
+    productId: bigint("product_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => products.id),
+    name: varchar("name", { length: 120 }).notNull(),
+    nameEn: varchar("name_en", { length: 120 }),
+    priceMinor: int("price_minor").notNull(),
+    officialPriceMinor: int("official_price_minor"),
+    /** Manual products: units left (null = unlimited). Automatic options count their codes instead. */
+    manualStock: int("manual_stock"),
+    sortOrder: int("sort_order").notNull().default(0),
+    /** Removed options that have orders or codes are switched off instead of deleted. */
+    isActive: boolean("is_active").notNull().default(true),
+    ...timestamps,
+  },
+  (t) => [index("product_variants_product_idx").on(t.productId)],
+);
+
 /** Pre-loaded digital codes for automatic delivery. Each code is assigned to at most one order item. */
 export const productCodes = mysqlTable(
   "product_codes",
@@ -116,6 +142,8 @@ export const productCodes = mysqlTable(
     productId: bigint("product_id", { mode: "number", unsigned: true })
       .notNull()
       .references(() => products.id),
+    /** Set for products with options: the code is only handed out for that option. */
+    variantId: bigint("variant_id", { mode: "number", unsigned: true }).references(() => productVariants.id),
     code: text("code").notNull(),
     orderId: bigint("order_id", { mode: "number", unsigned: true }),
     /** The order line this code was delivered for (one code per unit). */
@@ -181,6 +209,9 @@ export const orderItems = mysqlTable(
       .notNull()
       .references(() => products.id),
     productName: varchar("product_name", { length: 200 }).notNull(),
+    /** The option bought (products with options only), with its Serbian name as a snapshot. */
+    variantId: bigint("variant_id", { mode: "number", unsigned: true }).references(() => productVariants.id),
+    variantName: varchar("variant_name", { length: 120 }),
     quantity: int("quantity").notNull(),
     unitPriceMinor: int("unit_price_minor").notNull(),
     ...timestamps,
@@ -243,6 +274,7 @@ export const stripeEvents = mysqlTable("stripe_events", {
 export type Category = typeof categories.$inferSelect;
 export type Subcategory = typeof subcategories.$inferSelect;
 export type Product = typeof products.$inferSelect;
+export type ProductVariant = typeof productVariants.$inferSelect;
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type Coupon = typeof coupons.$inferSelect;
