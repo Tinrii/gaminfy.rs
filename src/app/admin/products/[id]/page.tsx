@@ -41,7 +41,7 @@ async function EditProduct({ params }: Pick<PageProps<"/admin/products/[id]">, "
     listKnownImages(),
   ]);
   if (!data) notFound();
-  const { product, codes, variants } = data;
+  const { product, codes, variants, faqs } = data;
   const available = codes.filter((c) => c.orderId === null);
   const used = codes.length - available.length;
   const optionName = new Map(variants.map((v) => [v.id, v.name]));
@@ -73,7 +73,9 @@ async function EditProduct({ params }: Pick<PageProps<"/admin/products/[id]">, "
       <ProductForm
         product={product}
         variants={variants}
+        faqs={faqs}
         categories={cats.map((c) => c.category)}
+
         subcategories={subs}
         images={images}
         uploadsEnabled={uploadsEnabled()}

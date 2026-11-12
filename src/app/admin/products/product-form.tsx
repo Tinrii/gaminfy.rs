@@ -4,21 +4,24 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { Product, ProductVariant } from "@/lib/db/schema";
+import type { Product, ProductFaq, ProductVariant } from "@/lib/db/schema";
 import { CONTACT_FIELD_KEYS, CONTACT_FIELD_LABEL, parseContactFields } from "@/lib/format";
 import { saveProduct } from "../actions";
 import { ImageUploadField } from "../image-upload-field";
 import { ActionForm, SubmitButton } from "../ui";
+import { FaqEditor, toFaqRows } from "./faq-editor";
 import { VariantsEditor, toVariantRows } from "./variants-editor";
 
 const selectClass = "h-10 w-full rounded-xl border border-input bg-background px-3 text-sm";
 
 // Stable default: a fresh [] each render would retrigger the saved-options sync below.
 const NO_VARIANTS: ProductVariant[] = [];
+const NO_FAQS: ProductFaq[] = [];
 
 export function ProductForm({
   product,
   variants = NO_VARIANTS,
+  faqs = NO_FAQS,
   categories,
   subcategories,
   images,
@@ -27,6 +30,8 @@ export function ProductForm({
   product?: Product;
   /** Saved active options, in order. */
   variants?: ProductVariant[];
+  /** Saved FAQ, in order. */
+  faqs?: ProductFaq[];
   categories: { id: number; name: string; imageUrl: string | null }[];
   subcategories: { id: number; categoryId: number; name: string }[];
   images: string[];
@@ -46,6 +51,13 @@ export function ProductForm({
     setOptionRows(toVariantRows(variants));
   }
   const hasOptions = optionRows.length > 0;
+
+  const [faqRows, setFaqRows] = useState(() => toFaqRows(faqs));
+  const [savedFaqs, setSavedFaqs] = useState(faqs);
+  if (faqs !== savedFaqs) {
+    setSavedFaqs(faqs);
+    setFaqRows(toFaqRows(faqs));
+  }
 
   return (
     <ActionForm action={saveProduct} className="space-y-6 rounded-2xl border border-white/[0.06] bg-card p-6">
@@ -232,8 +244,11 @@ export function ProductForm({
         </Field>
       </div>
 
+      <FaqEditor rows={faqRows} onChange={setFaqRows} />
+
       <div className="flex flex-wrap items-center gap-6">
         <Field label="Sort order" htmlFor="sortOrder">
+
           <Input id="sortOrder" name="sortOrder" type="number" defaultValue={product?.sortOrder ?? 0} className="h-10 w-28 rounded-xl" />
         </Field>
         <label className="mt-6 flex items-center gap-2 text-sm">

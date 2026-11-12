@@ -126,6 +126,7 @@ const sr = {
     from: "od",
     chooseOption: "Izaberi opciju",
     buyNow: "Kupi odmah",
+    faqTitle: "Česta pitanja",
     officialPrice: "Zvanična cena u prodavnici igre",
     youSave: "Štediš {amount} kod nas",
     secureCheckout: "Sigurno plaćanje preko Stripe-a. Nikada ne tražimo lozinku tvog naloga.",
@@ -643,6 +644,8 @@ const en: Dictionary = {
     from: "from",
     chooseOption: "Choose an option",
     buyNow: "Buy now",
+    faqTitle: "Frequently asked questions",
+
     officialPrice: "Official in-game store price",
     youSave: "You save {amount} with us",
     secureCheckout: "Secure checkout by Stripe.",

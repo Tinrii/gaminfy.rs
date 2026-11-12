@@ -12,8 +12,18 @@ import { fillMissingCodes, notifyDelivered } from "@/lib/orders";
 import { putPublicObject } from "@/lib/storage";
 import sharp from "sharp";
 
-const { products, productVariants, productCodes, categories, subcategories, orders, orderItems, contactMessages, coupons } =
-  schema;
+const {
+  products,
+  productVariants,
+  productFaqs,
+  productCodes,
+  categories,
+  subcategories,
+  orders,
+  orderItems,
+  contactMessages,
+  coupons,
+} = schema;
 
 export type AdminState = { ok?: boolean; error?: string; message?: string };
 
@@ -82,6 +92,33 @@ function parseVariants(formData: FormData) {
     }))
     .filter((r) => [r.name, r.nameEn, r.price, r.officialPrice, r.manualStock].some((v) => v.trim() !== ""));
   return z.array(variantSchema).max(30, "Up to 30 options per product.").safeParse(rows);
+}
+
+const faqSchema = z.object({
+  question: text(255).min(1, "Every FAQ needs a Serbian question."),
+  questionEn: optionalText(255),
+  answer: text(5000).min(1, "Every FAQ needs a Serbian answer."),
+  answerEn: optionalText(5000),
+});
+
+/** The FAQ editor posts parallel arrays; fully empty rows are ignored. */
+function parseFaqs(formData: FormData) {
+  const col = (name: string) => formData.getAll(name).map((v) => String(v));
+  const [questions, questionsEn, answers, answersEn] = [
+    col("faqQuestion"),
+    col("faqQuestionEn"),
+    col("faqAnswer"),
+    col("faqAnswerEn"),
+  ];
+  const rows = questions
+    .map((question, i) => ({
+      question,
+      questionEn: questionsEn[i] ?? "",
+      answer: answers[i] ?? "",
+      answerEn: answersEn[i] ?? "",
+    }))
+    .filter((r) => [r.question, r.questionEn, r.answer, r.answerEn].some((v) => v.trim() !== ""));
+  return z.array(faqSchema).max(30, "Up to 30 questions per product.").safeParse(rows);
 }
 
 type Tx = Parameters<Parameters<ReturnType<typeof db>["transaction"]>[0]>[0];
@@ -163,6 +200,8 @@ export async function saveProduct(_prev: AdminState, formData: FormData): Promis
 
   const variants = parseVariants(formData);
   if (!variants.success) return { error: variants.error.issues[0]?.message ?? "Check the options." };
+  const faqs = parseFaqs(formData);
+  if (!faqs.success) return { error: faqs.error.issues[0]?.message ?? "Check the FAQ." };
   // With options, the product's own price mirrors the cheapest one, so listings, sorting
   // and price filters show "from" that price.
   const cheapest = variants.data.reduce<(typeof variants.data)[number] | null>(
@@ -222,6 +261,11 @@ export async function saveProduct(_prev: AdminState, formData: FormData): Promis
         pid = res.insertId;
       }
       await syncVariants(tx, pid, variants.data, data.deliveryType);
+      // Nothing references FAQ rows, so they are simply replaced in form order.
+      await tx.delete(productFaqs).where(eq(productFaqs.productId, pid));
+      if (faqs.data.length) {
+        await tx.insert(productFaqs).values(faqs.data.map((f, sortOrder) => ({ ...f, productId: pid, sortOrder })));
+      }
       return pid;
     });
   } catch (err) {
@@ -282,6 +326,8 @@ export async function deleteProduct(formData: FormData) {
     await db().transaction(async (tx) => {
       await tx.delete(productCodes).where(eq(productCodes.productId, id));
       await tx.delete(productVariants).where(eq(productVariants.productId, id));
+      await tx.delete(productFaqs).where(eq(productFaqs.productId, id));
+
       await tx.delete(products).where(eq(products.id, id));
     });
   }

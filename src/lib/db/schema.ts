@@ -134,6 +134,25 @@ export const productVariants = mysqlTable(
   (t) => [index("product_variants_product_idx").on(t.productId)],
 );
 
+/** Questions and answers shown in the FAQ at the bottom of a product page, in admin order. */
+export const productFaqs = mysqlTable(
+  "product_faqs",
+  {
+    id: id(),
+    productId: bigint("product_id", { mode: "number", unsigned: true })
+      .notNull()
+      .references(() => products.id),
+    /** Serbian (default) copy; *En columns hold the English translation (falls back to Serbian). */
+    question: varchar("question", { length: 255 }).notNull(),
+    questionEn: varchar("question_en", { length: 255 }),
+    answer: text("answer").notNull(),
+    answerEn: text("answer_en"),
+    sortOrder: int("sort_order").notNull().default(0),
+    ...timestamps,
+  },
+  (t) => [index("product_faqs_product_idx").on(t.productId)],
+);
+
 /** Pre-loaded digital codes for automatic delivery. Each code is assigned to at most one order item. */
 export const productCodes = mysqlTable(
   "product_codes",
@@ -275,6 +294,7 @@ export type Category = typeof categories.$inferSelect;
 export type Subcategory = typeof subcategories.$inferSelect;
 export type Product = typeof products.$inferSelect;
 export type ProductVariant = typeof productVariants.$inferSelect;
+export type ProductFaq = typeof productFaqs.$inferSelect;
 export type Order = typeof orders.$inferSelect;
 export type OrderItem = typeof orderItems.$inferSelect;
 export type Coupon = typeof coupons.$inferSelect;

@@ -12,6 +12,7 @@ const {
   coupons,
   products,
   productVariants,
+  productFaqs,
   productCodes,
   categories,
   subcategories,
@@ -142,7 +143,7 @@ export type AdminProductRow = Awaited<ReturnType<typeof listProductsAdmin>>[numb
 export async function getProductAdmin(id: number) {
   const [product] = await db().select().from(products).where(eq(products.id, id));
   if (!product) return null;
-  const [codes, variants] = await Promise.all([
+  const [codes, variants, faqs] = await Promise.all([
     db()
       .select({
         id: productCodes.id,
@@ -160,8 +161,14 @@ export async function getProductAdmin(id: number) {
       .from(productVariants)
       .where(and(eq(productVariants.productId, id), eq(productVariants.isActive, true)))
       .orderBy(asc(productVariants.sortOrder), asc(productVariants.id)),
+    db()
+      .select()
+      .from(productFaqs)
+      .where(eq(productFaqs.productId, id))
+      .orderBy(asc(productFaqs.sortOrder), asc(productFaqs.id)),
   ]);
-  return { product, codes, variants };
+  return { product, codes, variants, faqs };
+
 }
 
 export async function listCategoriesAdmin() {

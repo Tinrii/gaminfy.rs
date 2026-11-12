@@ -4,7 +4,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import type { Locale } from "@/i18n/config";
 import { db, schema } from "@/lib/db";
 
-const { categories, subcategories, products, productVariants, orders } = schema;
+const { categories, subcategories, products, productVariants, productFaqs, orders } = schema;
 
 export const CATALOG_TAG = "catalog";
 export const PAGE_SIZE = 10;
@@ -318,6 +318,8 @@ export type ProductDetail = ProductCard & {
   stock: number | null;
   /** Active options in admin order; empty when the product is sold as itself. */
   variants: ProductVariantOption[];
+  /** FAQ shown at the bottom of the product page, in admin order. */
+  faqs: { question: string; answer: string }[];
 };
 
 export async function getProduct(slug: string, locale: Locale): Promise<ProductDetail | null> {
@@ -343,7 +345,17 @@ export async function getProduct(slug: string, locale: Locale): Promise<ProductD
   if (!row) return null;
   const { manualStock, codes, ...rest } = row;
   const card = toCard(rest);
-  const variants = card.hasVariants ? await getVariantOptions(card.id, card.deliveryType, locale) : [];
+  const [variants, faqs] = await Promise.all([
+    card.hasVariants ? getVariantOptions(card.id, card.deliveryType, locale) : [],
+    db()
+      .select({
+        question: tr<string>(productFaqs.question, productFaqs.questionEn, locale),
+        answer: tr<string>(productFaqs.answer, productFaqs.answerEn, locale),
+      })
+      .from(productFaqs)
+      .where(eq(productFaqs.productId, card.id))
+      .orderBy(asc(productFaqs.sortOrder), asc(productFaqs.id)),
+  ]);
   return {
     ...card,
     description: rest.description,
@@ -352,7 +364,9 @@ export async function getProduct(slug: string, locale: Locale): Promise<ProductD
     requiredContactFields: rest.requiredContactFields,
     stock: variants.length ? null : rest.deliveryType === "automatic" ? Number(codes) : manualStock,
     variants,
+    faqs,
   };
+
 }
 
 /** A product's active options with live stock, in admin sort order. */

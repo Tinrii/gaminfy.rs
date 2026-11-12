@@ -14,6 +14,7 @@ import {
   ZapIcon,
 } from "lucide-react";
 import { Reveal } from "@/components/motion/reveal";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { ProductCard } from "@/components/shop/product-card";
 import { ProductImage } from "@/components/shop/product-image";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -127,6 +128,19 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
                   seller: { "@id": `${siteUrl()}/#organization` },
                 },
           },
+          ...(product.faqs.length
+            ? [
+                {
+                  "@context": "https://schema.org",
+                  "@type": "FAQPage",
+                  mainEntity: product.faqs.map((f) => ({
+                    "@type": "Question",
+                    name: f.question,
+                    acceptedAnswer: { "@type": "Answer", text: f.answer },
+                  })),
+                },
+              ]
+            : []),
           breadcrumbLd([
             { name: dict.nav.marketplace, url: absoluteUrl(locale, "/marketplace") },
             { name: product.categoryName, url: absoluteUrl(locale, categoryPath) },
@@ -270,7 +284,30 @@ async function ProductContent({ params }: Pick<PageProps<"/[lang]/product/[slug]
           </div>
         </div>
 
+        {product.faqs.length > 0 && (
+          <Reveal>
+            <section className="mt-24" aria-labelledby="product-faq">
+              <h2 id="product-faq" className="mb-6 text-xl font-semibold">
+                {dict.product.faqTitle}
+              </h2>
+              <Accordion type="single" collapsible className="rounded-2xl border border-white/[0.06] bg-card px-5 sm:px-6">
+                {product.faqs.map((f, i) => (
+                  <AccordionItem key={i} value={String(i)} className="border-white/[0.06]">
+                    <AccordionTrigger className="items-center py-5 text-left text-sm font-semibold hover:text-primary hover:no-underline sm:text-base">
+                      {f.question}
+                    </AccordionTrigger>
+                    <AccordionContent className="pb-5 text-sm leading-relaxed whitespace-pre-line text-muted-foreground">
+                      {f.answer}
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            </section>
+          </Reveal>
+        )}
+
         {related.length > 0 && (
+
           <Reveal>
             <section className="mt-24">
               <div className="mb-6 flex items-end justify-between gap-4">
