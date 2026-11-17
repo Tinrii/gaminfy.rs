@@ -1,6 +1,6 @@
 import "server-only";
 import { localePath, type Locale } from "@/i18n/config";
-import { formatPrice } from "@/lib/format";
+import { formatPrice, splitCodeFields } from "@/lib/format";
 
 const SITE = () => process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
 
@@ -73,8 +73,19 @@ ${body}
 const p = (text: string) => `<p style="margin:0 0 14px;font-size:14px;line-height:1.6;color:#cfe3dc">${text}</p>`;
 const button = (href: string, label: string) =>
   `<a href="${href}" style="display:inline-block;margin-top:8px;background:#2ee38a;color:#00140f;font-weight:600;font-size:14px;text-decoration:none;padding:12px 20px;border-radius:10px">${esc(label)}</a>`;
-const codeBlock = (code: string) =>
-  `<div style="margin:6px 0 10px;padding:14px 16px;border:1px dashed #2ee38a;border-radius:12px;font-family:Consolas,monospace;font-size:17px;letter-spacing:1px;color:#ffffff;word-break:break-all">${esc(code)}</div>`;
+const codeBlock = (code: string) => {
+  // Account codes ("Label: value" lines) list each field under a small label.
+  const fields = splitCodeFields(code);
+  const inner = fields
+    ? fields
+        .map(
+          (f) =>
+            `<div style="margin:2px 0 8px"><div style="font-family:Arial,sans-serif;font-size:11px;letter-spacing:0;color:#8eb0a5">${esc(f.label)}</div><div style="font-size:15px">${esc(f.value)}</div></div>`,
+        )
+        .join("")
+    : esc(code);
+  return `<div style="margin:6px 0 10px;padding:14px 16px;border:1px dashed #2ee38a;border-radius:12px;font-family:Consolas,monospace;font-size:17px;letter-spacing:1px;color:#ffffff;word-break:break-all">${inner}</div>`;
+};
 
 export type EmailOrderItem = {
   name: string;

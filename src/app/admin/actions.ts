@@ -7,7 +7,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth";
 import { CATALOG_TAG } from "@/lib/catalog";
 import { db, schema } from "@/lib/db";
-import { CONTACT_FIELD_KEYS } from "@/lib/format";
+import { CONTACT_FIELD_KEYS, formatCodeFields, parseCodeFieldLabels } from "@/lib/format";
 import { fillMissingCodes, notifyDelivered } from "@/lib/orders";
 import { putPublicObject } from "@/lib/storage";
 import sharp from "sharp";
@@ -202,6 +202,17 @@ export async function saveProduct(_prev: AdminState, formData: FormData): Promis
   if (!variants.success) return { error: variants.error.issues[0]?.message ?? "Check the options." };
   const faqs = parseFaqs(formData);
   if (!faqs.success) return { error: faqs.error.issues[0]?.message ?? "Check the FAQ." };
+  const codeFields = formData
+    .getAll("codeField")
+    .map((f) => String(f).trim())
+    .filter(Boolean);
+  if (codeFields.some((f) => f.includes(":") || f.length > 60)) {
+    return { error: "Code field names can't contain a colon (max 60 characters)." };
+  }
+  if (new Set(codeFields.map((f) => f.toLowerCase())).size !== codeFields.length) {
+    return { error: "Code field names must be different." };
+  }
+  if (codeFields.length > 20) return { error: "At most 20 code fields." };
   // With options, the product's own price mirrors the cheapest one, so listings, sorting
   // and price filters show "from" that price.
   const cheapest = variants.data.reduce<(typeof variants.data)[number] | null>(
@@ -246,6 +257,8 @@ export async function saveProduct(_prev: AdminState, formData: FormData): Promis
     priceMinor: Math.round(price * 100),
     officialPriceMinor: officialPrice === null ? null : Math.round(officialPrice * 100),
     requiredContactFields: data.deliveryType === "manual" && contactFields.length ? contactFields.join(",") : null,
+    // Accounts (several fields per code) only apply to automatic delivery.
+    codeFields: data.deliveryType === "automatic" && codeFields.length ? codeFields.join("\n") : null,
     // With options, stock lives on each option.
     manualStock: data.deliveryType === "manual" && !cheapest ? data.manualStock : null,
   };
@@ -338,13 +351,40 @@ export async function deleteProduct(formData: FormData) {
 export async function addCodes(_prev: AdminState, formData: FormData): Promise<AdminState> {
   await requireAdmin();
   const productId = Number(formData.get("productId"));
-  const lines = String(formData.get("codes") ?? "")
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
+  if (!Number.isInteger(productId)) return { error: "Unknown product." };
+  const [product] = await db()
+    .select({ codeFields: products.codeFields })
+    .from(products)
+    .where(eq(products.id, productId));
+  if (!product) return { error: "Unknown product." };
+
+  // Account products post one input per field per account ("field-0", "field-1", …) and
+  // each account is stored as "Label: value" lines. Others paste one code per line.
+  const labels = parseCodeFieldLabels(product.codeFields);
+  if (String(formData.get("codeFields") ?? "") !== labels.join("\n")) {
+    return { error: "The product's code fields changed — refresh the page and try again." };
+  }
+  let lines: string[];
+  if (labels.length) {
+    const columns = labels.map((_, i) => formData.getAll(`field-${i}`).map(String));
+    const accounts = Math.max(...columns.map((c) => c.length));
+    lines = Array.from({ length: accounts }, (_, a) =>
+      formatCodeFields(
+        labels,
+        columns.map((c) => c[a] ?? ""),
+      ),
+    ).filter(Boolean);
+  } else {
+    lines = String(formData.get("codes") ?? "")
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter(Boolean);
+  }
   const unique = [...new Set(lines)];
-  if (!Number.isInteger(productId) || unique.length === 0) return { error: "Paste at least one code (one per line)." };
-  if (unique.some((c) => c.length > 1000)) return { error: "One of the codes is too long." };
+  if (unique.length === 0) {
+    return { error: labels.length ? "Fill in at least one account." : "Paste at least one code (one per line)." };
+  }
+  if (unique.some((c) => c.length > 4000)) return { error: "One of the codes is too long." };
 
   // Products with options take codes per option, so each buyer gets a key for what they chose.
   const options = await db()

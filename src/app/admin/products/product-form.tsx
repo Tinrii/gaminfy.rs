@@ -9,6 +9,7 @@ import { CONTACT_FIELD_KEYS, CONTACT_FIELD_LABEL, parseContactFields } from "@/l
 import { saveProduct } from "../actions";
 import { ImageUploadField } from "../image-upload-field";
 import { ActionForm, SubmitButton } from "../ui";
+import { CodeFieldsEditor } from "./code-fields-editor";
 import { FaqEditor, toFaqRows } from "./faq-editor";
 import { VariantsEditor, toVariantRows } from "./variants-editor";
 
@@ -185,6 +186,8 @@ export function ProductForm({
       </fieldset>
 
       <VariantsEditor rows={optionRows} onChange={setOptionRows} manual={delivery === "manual"} />
+
+      {delivery === "automatic" && <CodeFieldsEditor defaultValue={product?.codeFields} />}
 
       {delivery === "manual" && (
         <div className="grid gap-5 md:grid-cols-2">

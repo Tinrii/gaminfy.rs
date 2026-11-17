@@ -10,13 +10,22 @@ import { Textarea } from "@/components/ui/textarea";
 import { getProductAdmin, listCategoriesAdmin, listKnownImages, listSubcategoriesAdmin } from "@/lib/admin-data";
 import { requireAdmin } from "@/lib/auth";
 import { uploadsEnabled } from "@/lib/storage";
-import { formatDate } from "@/lib/format";
+import { formatDate, parseCodeFieldLabels, splitCodeFields } from "@/lib/format";
 import { addCodes, deleteCode, deleteProduct } from "../../actions";
 import { ActionForm, SubmitButton } from "../../ui";
+import { AccountCodesFields } from "../account-codes-fields";
 import { ConfirmDelete } from "../confirm-delete";
 import { ProductForm } from "../product-form";
 
 export const metadata: Metadata = { title: "Edit product" };
+
+const mask = (s: string) => (s.length > 6 ? `${s.slice(0, 4)}••••${s.slice(-2)}` : "••••");
+
+/** Masked: admins can see full codes on the order page once assigned. Accounts show their first field. */
+function maskCode(code: string) {
+  const first = splitCodeFields(code)?.[0];
+  return first ? `${first.label}: ${mask(first.value)}` : mask(code);
+}
 
 export default function EditProductPage({ params }: PageProps<"/admin/products/[id]">) {
   return (
@@ -42,6 +51,7 @@ async function EditProduct({ params }: Pick<PageProps<"/admin/products/[id]">, "
   ]);
   if (!data) notFound();
   const { product, codes, variants, faqs } = data;
+  const labels = parseCodeFieldLabels(product.codeFields);
   const available = codes.filter((c) => c.orderId === null);
   const used = codes.length - available.length;
   const optionName = new Map(variants.map((v) => [v.id, v.name]));
@@ -118,19 +128,27 @@ async function EditProduct({ params }: Pick<PageProps<"/admin/products/[id]">, "
                 </select>
               </div>
             )}
-            <Label htmlFor="codes">Add codes (one per line)</Label>
-            <Textarea id="codes" name="codes" rows={5} placeholder={"XXXX-XXXX-XXXX\nYYYY-YYYY-YYYY"} className="rounded-xl font-mono text-sm" />
-            <SubmitButton className="rounded-xl">Add codes</SubmitButton>
+            <input type="hidden" name="codeFields" value={labels.join("\n")} />
+            {labels.length ? (
+              <>
+                <p className="text-sm font-medium">Add accounts</p>
+                <AccountCodesFields labels={labels} />
+                <SubmitButton className="rounded-xl">Add accounts</SubmitButton>
+              </>
+            ) : (
+              <>
+                <Label htmlFor="codes">Add codes (one per line)</Label>
+                <Textarea id="codes" name="codes" rows={5} placeholder={"XXXX-XXXX-XXXX\nYYYY-YYYY-YYYY"} className="rounded-xl font-mono text-sm" />
+                <SubmitButton className="rounded-xl">Add codes</SubmitButton>
+              </>
+            )}
           </ActionForm>
 
           {codes.length > 0 && (
             <ul className="max-h-96 divide-y divide-white/[0.05] overflow-y-auto rounded-xl border border-white/[0.06]">
               {codes.map((c) => (
                 <li key={c.id} className="flex items-center gap-3 px-4 py-2 text-sm">
-                  {/* Masked: admins can see full codes on the order page once assigned. */}
-                  <code className="min-w-0 flex-1 truncate font-mono text-xs">
-                    {c.code.length > 6 ? `${c.code.slice(0, 4)}••••${c.code.slice(-2)}` : "••••"}
-                  </code>
+                  <code className="min-w-0 flex-1 truncate font-mono text-xs">{maskCode(c.code)}</code>
                   {variants.length > 0 && c.variantId && optionName.has(c.variantId) && (
                     <span className="rounded-full bg-white/5 px-2 py-0.5 text-xs">{optionName.get(c.variantId)}</span>
                   )}

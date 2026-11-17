@@ -102,7 +102,7 @@ async function AdminOrder({ params }: Pick<PageProps<"/admin/orders/[id]">, "par
                 {item.deliveryType === "automatic" && (
                   <div className="mt-2 space-y-1.5">
                     {item.codes.map((code) => (
-                      <p key={code} className="rounded-lg bg-background/60 px-3 py-2 font-mono text-sm break-all">
+                      <p key={code} className="rounded-lg bg-background/60 px-3 py-2 font-mono text-sm break-all whitespace-pre-line">
                         {code}
                       </p>
                     ))}

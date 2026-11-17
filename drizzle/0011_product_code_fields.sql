@@ -1,0 +1,1 @@
+ALTER TABLE `products` ADD `code_fields` text;

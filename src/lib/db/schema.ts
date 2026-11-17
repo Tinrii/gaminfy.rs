@@ -101,6 +101,12 @@ export const products = mysqlTable(
     requiredContactFields: varchar("required_contact_fields", { length: 255 }),
     /** Stock for manual products; automatic products derive stock from unassigned codes. */
     manualStock: int("manual_stock"),
+    /**
+     * Automatic products whose "code" is an account: newline-separated field labels
+     * (e.g. Email, Password). Null = plain one-line codes. Codes are stored as
+     * "Label: value" lines (see formatCodeFields).
+     */
+    codeFields: text("code_fields"),
     sortOrder: int("sort_order").notNull().default(0),
     isActive: boolean("is_active").notNull().default(true),
     ...timestamps,
