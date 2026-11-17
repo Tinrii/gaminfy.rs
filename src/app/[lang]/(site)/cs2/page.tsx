@@ -109,7 +109,7 @@ export default async function Cs2Page() {
           <div className="relative -order-1 lg:order-none">
             <div aria-hidden className="absolute -inset-6 rounded-[2.5rem] bg-primary/20 blur-3xl" />
             <div className="relative aspect-[4/3] overflow-hidden rounded-[2rem] border border-primary/30 shadow-2xl shadow-black/50 lg:aspect-square">
-              <Image src="/cs2/hero.webp" alt="" fill priority sizes="(min-width: 1024px) 560px, 100vw" className="object-cover" />
+              <Image src="/cs2/cs2hero.jpeg" alt="" fill priority sizes="(min-width: 1024px) 560px, 100vw" className="object-cover" />
             </div>
           </div>
         </div>
